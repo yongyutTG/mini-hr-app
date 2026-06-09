@@ -1,0 +1,22 @@
+# Local Apps Script project binding
+.clasp.json
+
+# Credentials and environment secrets
+.env
+.env.*
+credentials.json
+token.json
+scripts/credentials.json
+scripts/token.json
+
+# Dependencies and generated files
+node_modules/
+dist/
+coverage/
+*.log
+
+# Editor and OS files
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>ลงเวลา — Mini HR App</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Noto Sans Thai', system-ui, sans-serif;
+    background: #FFF8F0;
+    color: #1A1A1A;
+    padding: 16px;
+    min-height: 100vh;
+  }
+  .header {
+    background: linear-gradient(135deg, #D4550A, #F28C28);
+    color: #fff;
+    padding: 20px;
+    border-radius: 16px;
+    margin-bottom: 16px;
+  }
+  .header h1 { font-size: 22px; }
+  .header p { opacity: 0.9; font-size: 14px; margin-top: 4px; }
+
+  .slot-selector {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .slot-btn {
+    background: #fff;
+    border: 2px solid #E0D0C0;
+    padding: 14px;
+    border-radius: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .slot-btn.active {
+    background: #D4550A;
+    color: #fff;
+    border-color: #D4550A;
+  }
+
+  .info-box {
+    background: #fff;
+    padding: 16px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    border-left: 4px solid #F28C28;
+  }
+  .info-box .label { font-size: 12px; color: #777; margin-bottom: 4px; }
+  .info-box .value { font-size: 15px; font-weight: 600; }
+  .info-box.warn { border-color: #B23A3A; background: #FFF0F0; }
+  .info-box.ok { border-color: #1F7A1F; background: #F0FFF0; }
+
+  .camera-section {
+    background: #fff;
+    padding: 16px;
+    border-radius: 12px;
+    margin-bottom: 16px;
+    text-align: center;
+  }
+  .preview {
+    width: 100%;
+    max-width: 320px;
+    border-radius: 8px;
+    margin-top: 12px;
+    display: none;
+  }
+  .btn-camera {
+    background: #06C755;
+    color: #fff;
+    border: none;
+    padding: 14px 24px;
+    border-radius: 10px;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .btn-submit {
+    background: #D4550A;
+    color: #fff;
+    border: none;
+    padding: 16px;
+    border-radius: 12px;
+    font-size: 17px;
+    font-weight: 700;
+    width: 100%;
+    cursor: pointer;
+    margin-top: 8px;
+  }
+  .btn-submit:disabled {
+    background: #AAA;
+    cursor: not-allowed;
+  }
+
+  #status {
+    margin-top: 16px;
+    padding: 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    text-align: center;
+    display: none;
+  }
+  #status.show { display: block; }
+  #status.success { background: #1F7A1F; color: #fff; }
+  #status.error { background: #B23A3A; color: #fff; }
+  #status.loading { background: #F2A640; color: #fff; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📍 ลงเวลา</h1>
+  <p>เปิดกล้อง · GPS lock · ฝัง watermark อัตโนมัติ</p>
+</div>
+
+<div class="slot-selector">
+  <button class="slot-btn active" data-slot="IN">🌅 เข้างาน</button>
+  <button class="slot-btn" data-slot="LUNCH_OUT">🍽️ พักเที่ยง</button>
+  <button class="slot-btn" data-slot="LUNCH_IN">↩️ กลับจากพัก</button>
+  <button class="slot-btn" data-slot="OUT">👋 เลิกงาน</button>
+</div>
+
+<div class="info-box" id="gpsBox">
+  <div class="label">📡 GPS</div>
+  <div class="value" id="gpsValue">กำลังขอตำแหน่ง...</div>
+</div>
+
+<div class="info-box" id="distanceBox" style="display:none;">
+  <div class="label">📏 ระยะจากหน้างาน</div>
+  <div class="value" id="distanceValue">-</div>
+</div>
+
+<div class="camera-section">
+  <button class="btn-camera" id="btnCamera">📸 ถ่ายรูปสด</button>
+  <input type="file" id="fileInput" accept="image/*" capture="user" style="display:none">
+  <img id="preview" class="preview" alt="preview">
+</div>
+
+<button class="btn-submit" id="btnSubmit" disabled>ส่งลงเวลา</button>
+
+<div id="status"></div>
+
+<script>
+  // ============================================================
+  // Mini HR App — Check-in Page
+  // ============================================================
+  // Constraints:
+  //   - Camera MUST be live (capture=user attribute)
+  //   - GPS MUST be obtained before submit
+  //   - Watermark MUST be embedded in image
+  //   - Fallback gracefully if GPS denied
+  // ============================================================
+
+  const LIFF_ID = '{{LIFF_ID}}'; // injected from doGet
+  const APPS_SCRIPT_URL = '{{SCRIPT_URL}}';
+
+  let currentSlot = 'IN';
+  let gpsCoords = null;
+  let imageBase64 = null;
+  let userId = null;
+
+  document.querySelectorAll('.slot-btn').forEach(function(btn) {
+    btn.onclick = function() {
+      document.querySelectorAll('.slot-btn').forEach(function(b) { b.classList.remove('active'); });
+      btn.classList.add('active');
+      currentSlot = btn.dataset.slot;
+    };
+  });
+
+  document.getElementById('btnCamera').onclick = function() {
+    document.getElementById('fileInput').click();
+  };
+
+  document.getElementById('fileInput').onchange = async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    await processImage(file);
+  };
+
+  document.getElementById('btnSubmit').onclick = async function() {
+    await submitCheckin();
+  };
+
+  // ============================================================
+  // Init
+  // ============================================================
+  (async function init() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) liff.login();
+      const profile = await liff.getProfile();
+      userId = profile.userId;
+    } catch (err) {
+      showStatus('LIFF init failed: ' + err.message, 'error');
+    }
+    requestGPS();
+  })();
+
+  // ============================================================
+  // GPS
+  // ============================================================
+  function requestGPS() {
+    if (!navigator.geolocation) {
+      document.getElementById('gpsValue').textContent = '❌ ไม่รองรับ GPS';
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      function(pos) {
+        gpsCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        document.getElementById('gpsValue').textContent =
+          gpsCoords.lat.toFixed(5) + ', ' + gpsCoords.lng.toFixed(5);
+        document.getElementById('gpsBox').classList.add('ok');
+        checkCanSubmit();
+      },
+      function(err) {
+        let msg = '❌ ';
+        if (err.code === 1) msg += 'ต้องเปิด GPS permission';
+        else if (err.code === 3) msg += 'GPS timeout — ออกไปที่โล่ง';
+        else msg += 'GPS error';
+        document.getElementById('gpsValue').textContent = msg;
+        document.getElementById('gpsBox').classList.add('warn');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+    );
+  }
+
+  // ============================================================
+  // Image processing + watermark
+  // ============================================================
+  async function processImage(file) {
+    const img = await loadImage(file);
+
+    // Resize to max 1280px width
+    const maxW = 1280;
+    const canvas = document.createElement('canvas');
+    if (img.width > maxW) {
+      canvas.width = maxW;
+      canvas.height = (maxW / img.width) * img.height;
+    } else {
+      canvas.width = img.width;
+      canvas.height = img.height;
+    }
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Watermark
+    const barH = Math.max(70, canvas.height * 0.08);
+    ctx.fillStyle = 'rgba(0,0,0,0.65)';
+    ctx.fillRect(0, canvas.height - barH, canvas.width, barH);
+    ctx.fillStyle = '#FFFFFF';
+    ctx.font = 'bold ' + Math.floor(barH * 0.28) + 'px sans-serif';
+
+    const now = new Date();
+    const datetime = now.toLocaleString('th-TH', {
+      timeZone: 'Asia/Bangkok',
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit'
+    });
+    const gpsTxt = gpsCoords
+      ? gpsCoords.lat.toFixed(5) + ', ' + gpsCoords.lng.toFixed(5)
+      : 'GPS unavailable';
+
+    ctx.fillText('🕐 ' + datetime, 14, canvas.height - barH + barH * 0.4);
+    ctx.fillText('📍 ' + gpsTxt, 14, canvas.height - barH + barH * 0.75);
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+    imageBase64 = dataUrl.split(',')[1];
+
+    const preview = document.getElementById('preview');
+    preview.src = dataUrl;
+    preview.style.display = 'block';
+
+    checkCanSubmit();
+  }
+
+  function loadImage(file) {
+    return new Promise(function(resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function() {
+        const img = new Image();
+        img.onload = function() { resolve(img); };
+        img.onerror = reject;
+        img.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function checkCanSubmit() {
+    const btn = document.getElementById('btnSubmit');
+    btn.disabled = !(gpsCoords && imageBase64 && userId);
+  }
+
+  // ============================================================
+  // Submit
+  // ============================================================
+  async function submitCheckin() {
+    showStatus('กำลังส่ง...', 'loading');
+    document.getElementById('btnSubmit').disabled = true;
+
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' }, // Apps Script gotcha: must be text/plain to avoid CORS preflight
+        body: JSON.stringify({
+          action: 'checkin',
+          lineUserId: userId,
+          lat: gpsCoords.lat,
+          lng: gpsCoords.lng,
+          selfieBase64: imageBase64,
+          slot: currentSlot
+        })
+      });
+      const json = await res.json();
+
+      if (json.ok) {
+        if (json.inRange) {
+          showStatus('✅ ลงเวลาเรียบร้อย (' + json.distance + ' m)', 'success');
+        } else {
+          showStatus('⚠️ บันทึกแล้ว แต่อยู่นอกรัศมี (' + json.distance + 'm > ' +
+                     json.radiusLimit + 'm)', 'error');
+        }
+        setTimeout(function() { liff.closeWindow(); }, 2500);
+      } else {
+        showStatus('❌ ' + (json.message || json.error), 'error');
+        document.getElementById('btnSubmit').disabled = false;
+      }
+    } catch (err) {
+      showStatus('❌ ' + err.message, 'error');
+      document.getElementById('btnSubmit').disabled = false;
+    }
+  }
+
+  function showStatus(text, level) {
+    const el = document.getElementById('status');
+    el.textContent = text;
+    el.className = 'show ' + level;
+  }
+</script>
+</body>
+</html>

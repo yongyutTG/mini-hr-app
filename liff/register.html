@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>ลงทะเบียน — Mini HR App</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Noto Sans Thai', system-ui, sans-serif;
+    background: #FFF8F0; padding: 16px; color: #1A1A1A;
+  }
+  .header {
+    background: linear-gradient(135deg, #D4550A, #F28C28);
+    color: #fff; padding: 24px; border-radius: 16px; margin-bottom: 16px;
+  }
+  .header h1 { font-size: 22px; }
+  .header p { opacity: 0.9; font-size: 13px; margin-top: 4px; }
+  .field {
+    background: #fff; padding: 14px; border-radius: 10px; margin-bottom: 10px;
+  }
+  .field label { font-size: 12px; color: #777; display: block; margin-bottom: 4px; }
+  .field input, .field select {
+    width: 100%; border: 1px solid #DDD; padding: 10px; border-radius: 6px;
+    font-size: 15px; font-family: inherit;
+  }
+  .field input:focus { border-color: #D4550A; outline: none; }
+  .photo-box {
+    background: #fff; padding: 16px; border-radius: 10px; margin-bottom: 10px; text-align: center;
+  }
+  .photo-box label { display: block; font-size: 12px; color: #777; margin-bottom: 8px; }
+  .photo-box .btn {
+    background: #06C755; color: #fff; border: none; padding: 12px 20px;
+    border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; width: 100%;
+  }
+  .photo-box .preview { max-width: 200px; margin-top: 10px; border-radius: 8px; display: none; }
+  .btn-submit {
+    background: #D4550A; color: #fff; border: none; padding: 16px;
+    border-radius: 12px; font-size: 17px; font-weight: 700; width: 100%; margin-top: 12px;
+  }
+  .btn-submit:disabled { background: #AAA; }
+  #status {
+    margin-top: 14px; padding: 12px; border-radius: 8px; text-align: center; display: none;
+  }
+  #status.show { display: block; }
+  #status.success { background: #1F7A1F; color: #fff; }
+  #status.error { background: #B23A3A; color: #fff; }
+  #status.loading { background: #F2A640; color: #fff; }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>📝 ลงทะเบียนพนักงาน</h1>
+  <p>กรอกข้อมูลครั้งเดียวจบ</p>
+</div>
+
+<div class="field"><label>ชื่อ-นามสกุล *</label><input id="displayName" placeholder="สมชาย ใจดี"></div>
+<div class="field"><label>เบอร์โทร *</label><input id="phone" type="tel" placeholder="0812345678"></div>
+<div class="field"><label>อีเมล</label><input id="email" type="email"></div>
+<div class="field"><label>แผนก</label><input id="department" placeholder="Engineering"></div>
+<div class="field"><label>ตำแหน่ง</label><input id="position" placeholder="Developer"></div>
+
+<div class="field"><label>ธนาคาร *</label>
+  <select id="bankName">
+    <option value="">-- เลือก --</option>
+    <option>ไทยพาณิชย์ (SCB)</option>
+    <option>กสิกรไทย (KBANK)</option>
+    <option>กรุงเทพ (BBL)</option>
+    <option>กรุงไทย (KTB)</option>
+    <option>กรุงศรี (BAY)</option>
+    <option>ทีเอ็มบีธนชาต (TTB)</option>
+  </select>
+</div>
+<div class="field"><label>เลขที่บัญชี *</label><input id="bankAccountNo" placeholder="123-4-56789-0"></div>
+<div class="field"><label>ชื่อบัญชี *</label><input id="bankAccountName"></div>
+
+<div class="photo-box">
+  <label>📸 ภาพใบหน้า (selfie) *</label>
+  <button class="btn" id="btnSelfie">ถ่ายรูป</button>
+  <input type="file" id="fileSelfie" accept="image/*" capture="user" style="display:none">
+  <img id="previewSelfie" class="preview" alt="">
+</div>
+
+<div class="photo-box">
+  <label>🆔 บัตรประชาชน *</label>
+  <button class="btn" id="btnIdCard">ถ่ายรูป</button>
+  <input type="file" id="fileIdCard" accept="image/*" capture="environment" style="display:none">
+  <img id="previewIdCard" class="preview" alt="">
+</div>
+
+<button class="btn-submit" id="btnSubmit" disabled>ลงทะเบียน</button>
+<div id="status"></div>
+
+<script>
+  const LIFF_ID = '{{LIFF_ID}}';
+  const APPS_SCRIPT_URL = '{{SCRIPT_URL}}';
+
+  let userId = null;
+  let selfieBase64 = null;
+  let idCardBase64 = null;
+
+  (async function init() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) liff.login();
+      const profile = await liff.getProfile();
+      userId = profile.userId;
+      // Auto-fill name
+      document.getElementById('displayName').value = profile.displayName || '';
+    } catch (err) {
+      alert('LIFF init error: ' + err.message);
+    }
+  })();
+
+  document.getElementById('btnSelfie').onclick = function() { document.getElementById('fileSelfie').click(); };
+  document.getElementById('btnIdCard').onclick = function() { document.getElementById('fileIdCard').click(); };
+
+  document.getElementById('fileSelfie').onchange = async function(e) {
+    selfieBase64 = await resizeAndEncode(e.target.files[0]);
+    document.getElementById('previewSelfie').src = 'data:image/jpeg;base64,' + selfieBase64;
+    document.getElementById('previewSelfie').style.display = 'block';
+    checkCanSubmit();
+  };
+  document.getElementById('fileIdCard').onchange = async function(e) {
+    idCardBase64 = await resizeAndEncode(e.target.files[0]);
+    document.getElementById('previewIdCard').src = 'data:image/jpeg;base64,' + idCardBase64;
+    document.getElementById('previewIdCard').style.display = 'block';
+    checkCanSubmit();
+  };
+
+  async function resizeAndEncode(file) {
+    const img = await new Promise(function(res, rej) {
+      const reader = new FileReader();
+      reader.onload = function() {
+        const i = new Image();
+        i.onload = function() { res(i); };
+        i.src = reader.result;
+      };
+      reader.readAsDataURL(file);
+    });
+    const canvas = document.createElement('canvas');
+    const maxW = 1280;
+    const scale = img.width > maxW ? maxW / img.width : 1;
+    canvas.width = img.width * scale;
+    canvas.height = img.height * scale;
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+  }
+
+  function checkCanSubmit() {
+    const req = ['displayName','phone','bankName','bankAccountNo','bankAccountName'];
+    const allFilled = req.every(function(id) { return document.getElementById(id).value.trim(); });
+    document.getElementById('btnSubmit').disabled =
+      !(allFilled && selfieBase64 && idCardBase64 && userId);
+  }
+  document.querySelectorAll('input,select').forEach(function(el) { el.oninput = checkCanSubmit; });
+
+  document.getElementById('btnSubmit').onclick = async function() {
+    showStatus('กำลังส่ง...', 'loading');
+    document.getElementById('btnSubmit').disabled = true;
+
+    const payload = {
+      action: 'register',
+      lineUserId: userId,
+      displayName: document.getElementById('displayName').value.trim(),
+      phone: document.getElementById('phone').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      department: document.getElementById('department').value.trim(),
+      position: document.getElementById('position').value.trim(),
+      bankName: document.getElementById('bankName').value,
+      bankAccountNo: document.getElementById('bankAccountNo').value.trim(),
+      bankAccountName: document.getElementById('bankAccountName').value.trim(),
+      selfieBase64: selfieBase64,
+      idCardBase64: idCardBase64
+    };
+
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      if (json.ok) {
+        showStatus('✅ ลงทะเบียนเรียบร้อย รหัส: ' + json.employeeId, 'success');
+        setTimeout(function() { liff.closeWindow(); }, 2500);
+      } else if (json.error === 'already_registered') {
+        showStatus('⚠️ คุณลงทะเบียนแล้ว (' + json.employeeId + ')', 'error');
+      } else {
+        showStatus('❌ ' + (json.message || json.error), 'error');
+        document.getElementById('btnSubmit').disabled = false;
+      }
+    } catch (err) {
+      showStatus('❌ ' + err.message, 'error');
+      document.getElementById('btnSubmit').disabled = false;
+    }
+  };
+
+  function showStatus(t, l) {
+    const el = document.getElementById('status');
+    el.textContent = t; el.className = 'show ' + l;
+  }
+</script>
+</body>
+</html>
