@@ -2,13 +2,11 @@
  * ============================================================
  * Approval Handler — Multi-level state machine
  * ============================================================
- * Flow 7: L1 → L2 → L3
+ * Flow 7: L1 only
  * Actions: approve / approve_conditional / reject / need_info
  *
  * State transitions:
- *   pending_L1 -[approve]→ pending_L2 (if L2 exists) | approved
- *   pending_L2 -[approve]→ pending_L3 (if L3 exists) | approved
- *   pending_L3 -[approve]→ approved
+ *   pending_L1 -[approve]→ approved
  *   pending_*  -[reject]→ rejected
  *   pending_*  -[need_info]→ need_info (waiting employee response)
  */
@@ -36,7 +34,8 @@ function processApprovalPostback(payload) {
   }
 
   // === Verify current approver ===
-  if (record.current_approver !== approver.employee_id) {
+  const approvalAdmin = isHrAdmin(userId);
+  if (record.current_approver !== approver.employee_id && !approvalAdmin) {
     if (replyToken) replyMessage(replyToken, [{
       type: 'text',
       text: '❌ คุณไม่ใช่ผู้อนุมัติของคำขอนี้ในขั้นนี้'
@@ -56,17 +55,17 @@ function processApprovalPostback(payload) {
 
   // === Process action ===
   if (action === 'approve') {
-    return doApprove(record, type, level, approver, replyToken);
+    return doApprove(record, type, level, approver, replyToken, approvalAdmin);
   } else if (action === 'reject') {
-    return doReject(record, type, level, approver, replyToken);
+    return doReject(record, type, level, approver, replyToken, approvalAdmin);
   } else if (action === 'need_info') {
-    return doNeedInfo(record, type, level, approver, replyToken);
+    return doNeedInfo(record, type, level, approver, replyToken, approvalAdmin);
   }
 
   return { ok: false, error: 'unknown_action' };
 }
 
-function doApprove(record, type, level, approver, replyToken) {
+function doApprove(record, type, level, approver, replyToken, approvalAdmin) {
   // Append to history
   const history = parseHistory(record.approval_history);
   history.push({
@@ -74,61 +73,21 @@ function doApprove(record, type, level, approver, replyToken) {
     by: approver.employee_id,
     by_name: approver.display_name,
     action: 'approve',
+    override: Boolean(approvalAdmin && record.current_approver !== approver.employee_id),
     at: nowBangkok()
   });
 
   // Find employee
   const employee = findEmployeeById(record.employee_id);
 
-  // Determine next level
-  const config = getConfig();
-  const nextLevel = getNextLevel(level, employee, config);
-
   const sheetName = (type === 'leave') ? SHEETS.LEAVES.name : SHEETS.OT.name;
   const idField = (type === 'leave') ? 'leave_id' : 'ot_id';
 
-  if (nextLevel) {
-    // Forward to next level
-    const nextApprover = findEmployeeById(employee['approver_' + nextLevel + '_id']);
-    if (!nextApprover) {
-      logWarn('doApprove', 'next_approver_missing', { recordId: record[idField], nextLevel });
-      // Fallback: final approve
-      finalizeApproval(record, type, employee, history, sheetName, idField);
-    } else {
-      updateRowByNumber(sheetName, record._row, {
-        status: 'pending_' + nextLevel,
-        current_approver: nextApprover.employee_id,
-        approval_history: JSON.stringify(history)
-      });
-
-      // Notify next approver
-      if (type === 'leave') {
-        pushFlex(nextApprover.line_user_id, 'ใบลา: ' + employee.display_name, buildLeaveApprovalCard({
-          leave: record,
-          employee: employee,
-          level: nextLevel
-        }));
-      } else {
-        pushFlex(nextApprover.line_user_id, 'ขอ OT: ' + employee.display_name, buildOTApprovalCard({
-          ot: record,
-          employee: employee,
-          level: nextLevel
-        }));
-      }
-
-      if (replyToken) replyMessage(replyToken, [{
-        type: 'text',
-        text: '✅ อนุมัติแล้ว (ขั้น ' + level + ')\nส่งต่อ ' + nextApprover.display_name + ' (' + nextLevel + ')'
-      }]);
-    }
-  } else {
-    // Final approval
-    finalizeApproval(record, type, employee, history, sheetName, idField);
-    if (replyToken) replyMessage(replyToken, [{
-      type: 'text',
-      text: '✅ อนุมัติเรียบร้อย\n' + record[idField] + ' (' + level + ' = final)'
-    }]);
-  }
+  finalizeApproval(record, type, employee, history, sheetName, idField);
+  if (replyToken) replyMessage(replyToken, [{
+    type: 'text',
+    text: '✅ อนุมัติเรียบร้อย\n' + record[idField]
+  }]);
 
   logUserAction('doApprove', approver.line_user_id, 'success', {
     recordId: record[idField], level, type
@@ -160,13 +119,14 @@ function finalizeApproval(record, type, employee, history, sheetName, idField) {
   }]);
 }
 
-function doReject(record, type, level, approver, replyToken) {
+function doReject(record, type, level, approver, replyToken, approvalAdmin) {
   const history = parseHistory(record.approval_history);
   history.push({
     level: level,
     by: approver.employee_id,
     by_name: approver.display_name,
     action: 'reject',
+    override: Boolean(approvalAdmin && record.current_approver !== approver.employee_id),
     at: nowBangkok()
   });
 
@@ -192,13 +152,14 @@ function doReject(record, type, level, approver, replyToken) {
   return { ok: true };
 }
 
-function doNeedInfo(record, type, level, approver, replyToken) {
+function doNeedInfo(record, type, level, approver, replyToken, approvalAdmin) {
   const history = parseHistory(record.approval_history);
   history.push({
     level: level,
     by: approver.employee_id,
     by_name: approver.display_name,
     action: 'need_info',
+    override: Boolean(approvalAdmin && record.current_approver !== approver.employee_id),
     at: nowBangkok()
   });
 
@@ -230,19 +191,6 @@ function doNeedInfo(record, type, level, approver, replyToken) {
   return { ok: true };
 }
 
-function getNextLevel(currentLevel, employee, config) {
-  if (currentLevel === 'L1') {
-    if (config.enable_approval_L2 && employee.approver_L2_id) return 'L2';
-    if (config.enable_approval_L3 && employee.approver_L3_id) return 'L3';
-    return null;
-  }
-  if (currentLevel === 'L2') {
-    if (config.enable_approval_L3 && employee.approver_L3_id) return 'L3';
-    return null;
-  }
-  return null;
-}
-
 function parseHistory(historyStr) {
   if (!historyStr) return [];
   try {
@@ -260,22 +208,24 @@ function getApprovalInbox(payload) {
   const approver = findEmployeeByLineId(lineUserId);
   if (!approver) return { ok: false, error: 'not_registered' };
 
-  // Find all leaves + OTs where current_approver = me
+  const approvalAdmin = isHrAdmin(lineUserId);
+
   const pendingLeaves = filterRows(SHEETS.LEAVES.name, function(r) {
-    return r.current_approver === approver.employee_id
-      && String(r.status).indexOf('pending_') === 0;
+    return String(r.status).indexOf('pending_') === 0
+      && (approvalAdmin || r.current_approver === approver.employee_id);
   });
 
   const pendingOT = filterRows(SHEETS.OT.name, function(r) {
-    return r.current_approver === approver.employee_id
-      && String(r.status).indexOf('pending_') === 0;
+    return String(r.status).indexOf('pending_') === 0
+      && (approvalAdmin || r.current_approver === approver.employee_id);
   });
 
   return {
     ok: true,
     leaves: pendingLeaves,
     ot: pendingOT,
-    count: pendingLeaves.length + pendingOT.length
+    count: pendingLeaves.length + pendingOT.length,
+    approvalAdmin: approvalAdmin
   };
 }
 
@@ -284,7 +234,7 @@ function getApprovalInbox(payload) {
  */
 function processApproval(payload) {
   return processApprovalPostback({
-    action: payload.action,
+    action: payload.actionType,
     id: payload.id,
     level: payload.level,
     type: payload.type,

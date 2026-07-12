@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * Checkin notification + End-work reminder cards
+ * Checkin notification + end-work reminder cards
  * ============================================================
  */
 
@@ -8,12 +8,15 @@ function buildCheckinNotifyCard(opts) {
   const emp = opts.employee;
   const slot = opts.slot;
   const distance = opts.distance;
+  const branchName = opts.branchName || '-';
   const selfieUrl = opts.selfieUrl;
   const time = opts.time;
   const outOfRange = opts.outOfRange;
 
   const headerColor = outOfRange ? '#B23A3A' : COLOR_PRIMARY;
-  const headerText = outOfRange ? '⚠️ นอกรัศมี สแกน ' + thaiSlot(slot) : '✅ ลงเวลา ' + thaiSlot(slot);
+  const headerText = outOfRange
+    ? 'นอกรัศมี สแกน ' + thaiSlot(slot)
+    : 'ลงเวลา ' + thaiSlot(slot);
 
   return {
     type: 'bubble',
@@ -39,7 +42,8 @@ function buildCheckinNotifyCard(opts) {
       type: 'box',
       layout: 'vertical',
       contents: [
-        kvRow('พนักงาน', emp.employee_id + ' — ' + emp.display_name),
+        kvRow('พนักงาน', emp.employee_id + ' - ' + emp.display_name),
+        kvRow('สาขา', branchName),
         kvRow('ระยะ', distance + ' m' + (outOfRange ? ' (นอกรัศมี)' : '')),
         kvRow('ช่วง', thaiSlot(slot))
       ]
@@ -58,7 +62,7 @@ function thaiSlot(slot) {
 }
 
 /**
- * End-work reminder card (for employee still at work without approved OT)
+ * End-work reminder card for employees still at work without approved OT.
  */
 function buildEndWorkReminderCard(emp, hasOTRequest) {
   return {
@@ -70,8 +74,11 @@ function buildEndWorkReminderCard(emp, hasOTRequest) {
       backgroundColor: '#F2A640',
       paddingAll: 'md',
       contents: [{
-        type: 'text', text: '⚠️ แจ้งเตือนเลิกงาน',
-        color: '#FFFFFF', weight: 'bold', size: 'lg'
+        type: 'text',
+        text: 'แจ้งเตือนเลิกงาน',
+        color: '#FFFFFF',
+        weight: 'bold',
+        size: 'lg'
       }]
     },
     body: {
@@ -95,11 +102,14 @@ function buildEndWorkReminderCard(emp, hasOTRequest) {
         },
         {
           type: 'text',
-          text: 'ให้ออกจากออฟฟิศทันที',
+          text: hasOTRequest
+            ? 'คุณมีคำขอ OT แล้ว กรุณารออนุมัติ'
+            : 'ถ้าทำงานต่อ กรุณาขอ OT ก่อน',
           weight: 'bold',
           size: 'md',
           align: 'center',
-          margin: 'sm'
+          margin: 'sm',
+          wrap: true
         },
         { type: 'separator', margin: 'lg' },
         {
@@ -111,42 +121,14 @@ function buildEndWorkReminderCard(emp, hasOTRequest) {
           cornerRadius: 'md',
           contents: [{
             type: 'text',
-            text: '⚠️ คำเตือนสำคัญ',
-            weight: 'bold',
+            text: hasOTRequest
+              ? 'ระบบจะไม่แจ้งเตือนซ้ำเมื่อ OT ได้รับอนุมัติ'
+              : 'หากไม่ขอ OT ระบบอาจแจ้ง HR ว่ายังไม่ลงเวลาออก',
             size: 'sm',
-            color: '#B23A3A'
-          }, {
-            type: 'text',
-            text: 'หากไม่ได้รับอนุญาตให้ทำงานล่วงเวลา บริษัทฯ จะไม่รับผิดชอบค่าล่วงเวลาทุกกรณี',
-            size: 'xs',
-            wrap: true,
-            margin: 'sm'
+            color: '#6B4A00',
+            wrap: true
           }]
         }
-      ]
-    }
-  };
-}
-
-function buildLateCheckinAlertCard(emp, expectedTime, actualTime) {
-  return {
-    type: 'bubble',
-    header: {
-      type: 'box',
-      layout: 'vertical',
-      backgroundColor: '#F2A640',
-      paddingAll: 'md',
-      contents: [{
-        type: 'text', text: '⏰ มาสายแจ้งเตือน',
-        color: '#FFFFFF', weight: 'bold', size: 'lg'
-      }]
-    },
-    body: {
-      type: 'box', layout: 'vertical',
-      contents: [
-        kvRow('พนักงาน', emp.display_name),
-        kvRow('เวลาเข้างาน', expectedTime),
-        kvRow('เวลาเช็คอินจริง', actualTime || '-')
       ]
     }
   };

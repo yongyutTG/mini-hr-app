@@ -1,0 +1,20 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "public",
+  "redirects": [
+    { "source": "/", "destination": "https://liff.line.me/2010398855-7gTYrfCa", "permanent": false }
+  ],
+  "rewrites": [
+    { "source": "/home", "destination": "/home.html" },
+    { "source": "/profile", "destination": "/profile.html" },
+    { "source": "/register", "destination": "/register.html" },
+    { "source": "/checkin", "destination": "/checkin.html" },
+    { "source": "/leave", "destination": "/leave.html" },
+    { "source": "/ot", "destination": "/ot.html" },
+    { "source": "/balance", "destination": "/balance.html" },
+    { "source": "/hr-tools", "destination": "/hr-tools.html" },
+    { "source": "/approval-inbox", "destination": "/approval-inbox.html" },
+    { "source": "/evidence", "destination": "/evidence.html" },
+    { "source": "/response", "destination": "/response.html" }
+  ]
+}

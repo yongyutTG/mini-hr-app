@@ -13,10 +13,17 @@ scripts/token.json
 node_modules/
 dist/
 coverage/
+public/
+.vercel/
+.codex-spreadsheet-work/
 *.log
 
 # Editor and OS files
 .idea/
 .vscode/
+.vs/
 .DS_Store
 Thumbs.db
+
+.vercel
+-Context

@@ -66,3 +66,17 @@ function deleteImage(url) {
     return false;
   }
 }
+
+/**
+ * Manual authorization check for the Drive folder configured in Script Properties.
+ * Run once after changing OAuth scopes.
+ */
+function authorizeDriveAccess() {
+  const folderId = getProp('DRIVE_FOLDER_ID');
+  const folder = DriveApp.getFolderById(folderId);
+  return {
+    ok: true,
+    folderId: folder.getId(),
+    folderName: folder.getName()
+  };
+}

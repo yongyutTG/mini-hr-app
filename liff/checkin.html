@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
 <title>ลงเวลา — Mini HR App</title>
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,1,0&display=swap" rel="stylesheet">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
@@ -21,8 +24,42 @@
     border-radius: 16px;
     margin-bottom: 16px;
   }
-  .header h1 { font-size: 22px; }
+  .header h1 {
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
   .header p { opacity: 0.9; font-size: 14px; margin-top: 4px; }
+  .material-symbols-rounded {
+    font-family: 'Material Symbols Rounded';
+    font-weight: 500;
+    font-style: normal;
+    font-size: 22px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+  }
+  .header .material-symbols-rounded {
+    color: #fff;
+  }
+  .icon-label,
+  .slot-btn,
+  .btn-camera {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+  .icon-label {
+    justify-content: flex-start;
+  }
 
   .slot-selector {
     display: grid;
@@ -45,17 +82,22 @@
     border-color: #D4550A;
   }
 
-  .info-box {
+  .location-card {
     background: #fff;
-    padding: 16px;
-    border-radius: 12px;
+    padding: 18px;
+    border-radius: 16px;
     margin-bottom: 16px;
-    border-left: 4px solid #F28C28;
+    border: 1px solid #F4E2D0;
+    box-shadow: 0 8px 24px rgba(91, 42, 5, 0.08);
   }
-  .info-box .label { font-size: 12px; color: #777; margin-bottom: 4px; }
-  .info-box .value { font-size: 15px; font-weight: 600; }
-  .info-box.warn { border-color: #B23A3A; background: #FFF0F0; }
-  .info-box.ok { border-color: #1F7A1F; background: #F0FFF0; }
+  .location-card.ok { border-left: 5px solid #1F7A1F; background: #F7FFF7; }
+  .location-card.warn { border-left: 5px solid #B23A3A; background: #FFF7F7; }
+  .location-label { font-size: 12px; color: #777; font-weight: 800; margin-bottom: 4px; }
+  .location-name { font-size: 24px; line-height: 1.25; font-weight: 900; color: #1A1A1A; }
+  .location-state { margin-top: 8px; font-size: 14px; font-weight: 800; color: #D4550A; }
+  .location-card.ok .location-state { color: #1F7A1F; }
+  .location-card.warn .location-state { color: #B23A3A; }
+  .gps-note { margin-top: 8px; color: #888; font-size: 12px; }
 
   .camera-section {
     background: #fff;
@@ -72,7 +114,7 @@
     display: none;
   }
   .btn-camera {
-    background: #06C755;
+    background: #AAA;
     color: #fff;
     border: none;
     padding: 14px 24px;
@@ -112,33 +154,53 @@
   #status.success { background: #1F7A1F; color: #fff; }
   #status.error { background: #B23A3A; color: #fff; }
   #status.loading { background: #F2A640; color: #fff; }
+  .popup-backdrop {
+    position: fixed; inset: 0; z-index: 10000; display: none;
+    align-items: center; justify-content: center; padding: 18px;
+    background: rgba(0, 0, 0, 0.42);
+  }
+  .popup-backdrop.show { display: flex; }
+  .popup {
+    width: 100%; max-width: 340px; background: #fff; border-radius: 18px;
+    padding: 22px; text-align: center; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+  }
+  .popup-icon {
+    width: 54px; height: 54px; margin: 0 auto 10px; border-radius: 50%;
+    display: grid; place-items: center; background: #E9F8E9; color: #1F7A1F;
+  }
+  .popup-icon.warn { background: #FFF3E6; color: #D4550A; }
+  .popup-icon .material-symbols-rounded { font-size: 32px; }
+  .popup-title { font-size: 18px; font-weight: 900; margin-bottom: 6px; }
+  .popup-message { color: #666; font-size: 13px; line-height: 1.6; margin-bottom: 16px; white-space: pre-line; }
+  .popup-ok {
+    width: 100%; background: #D4550A; color: #fff; border: none;
+    border-radius: 10px; padding: 12px 14px; font-family: inherit;
+    font-size: 14px; font-weight: 800;
+  }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>📍 ลงเวลา</h1>
+  <h1><span class="material-symbols-rounded" aria-hidden="true">my_location</span>ลงเวลา</h1>
   <p>เปิดกล้อง · GPS lock · ฝัง watermark อัตโนมัติ</p>
 </div>
 
 <div class="slot-selector">
-  <button class="slot-btn active" data-slot="IN">🌅 เข้างาน</button>
-  <button class="slot-btn" data-slot="LUNCH_OUT">🍽️ พักเที่ยง</button>
-  <button class="slot-btn" data-slot="LUNCH_IN">↩️ กลับจากพัก</button>
-  <button class="slot-btn" data-slot="OUT">👋 เลิกงาน</button>
+  <button class="slot-btn active" data-slot="IN"><span class="material-symbols-rounded" aria-hidden="true">login</span>เข้างาน</button>
+  <button class="slot-btn" data-slot="LUNCH_OUT"><span class="material-symbols-rounded" aria-hidden="true">restaurant</span>พักเที่ยง</button>
+  <button class="slot-btn" data-slot="LUNCH_IN"><span class="material-symbols-rounded" aria-hidden="true">keyboard_return</span>กลับจากพัก</button>
+  <button class="slot-btn" data-slot="OUT"><span class="material-symbols-rounded" aria-hidden="true">logout</span>เลิกงาน</button>
 </div>
 
-<div class="info-box" id="gpsBox">
-  <div class="label">📡 GPS</div>
-  <div class="value" id="gpsValue">กำลังขอตำแหน่ง...</div>
-</div>
-
-<div class="info-box" id="distanceBox" style="display:none;">
-  <div class="label">📏 ระยะจากหน้างาน</div>
-  <div class="value" id="distanceValue">-</div>
+<div class="location-card" id="locationCard">
+  <div class="location-label">ตำแหน่งของคุณ</div>
+  <div class="location-name" id="branchName">กำลังตรวจสอบ...</div>
+  <div class="location-state" id="branchState">กำลังค้นหาสาขาที่ใกล้ที่สุด</div>
+  <div class="gps-note" id="gpsValue">กำลังขอตำแหน่ง GPS...</div>
 </div>
 
 <div class="camera-section">
-  <button class="btn-camera" id="btnCamera">📸 ถ่ายรูปสด</button>
+  <button class="btn-camera" id="btnCamera"><span class="material-symbols-rounded" aria-hidden="true">photo_camera</span>ถ่ายรูปสด</button>
   <input type="file" id="fileInput" accept="image/*" capture="user" style="display:none">
   <img id="preview" class="preview" alt="preview">
 </div>
@@ -146,6 +208,15 @@
 <button class="btn-submit" id="btnSubmit" disabled>ส่งลงเวลา</button>
 
 <div id="status"></div>
+
+<div class="popup-backdrop" id="resultPopup" role="dialog" aria-modal="true" aria-labelledby="resultPopupTitle">
+  <div class="popup">
+    <div class="popup-icon" id="resultPopupIcon"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span></div>
+    <div class="popup-title" id="resultPopupTitle">บันทึกสำเร็จ</div>
+    <div class="popup-message" id="resultPopupMessage">ลงเวลาเรียบร้อย</div>
+    <button class="popup-ok" id="resultPopupOk" type="button">ตกลง</button>
+  </div>
+</div>
 
 <script>
   // ============================================================
@@ -158,13 +229,14 @@
   //   - Fallback gracefully if GPS denied
   // ============================================================
 
-  const LIFF_ID = '{{LIFF_ID}}'; // injected from doGet
-  const APPS_SCRIPT_URL = '{{SCRIPT_URL}}';
+  const LIFF_ID = '<?= LIFF_ID ?>'; // injected from doGet
+  const APPS_SCRIPT_URL = '<?= SCRIPT_URL ?>';
 
   let currentSlot = 'IN';
   let gpsCoords = null;
   let imageBase64 = null;
   let userId = null;
+  let checkinBranches = [];
 
   document.querySelectorAll('.slot-btn').forEach(function(btn) {
     btn.onclick = function() {
@@ -187,6 +259,9 @@
   document.getElementById('btnSubmit').onclick = async function() {
     await submitCheckin();
   };
+  document.getElementById('resultPopupOk').onclick = function() {
+    hideResultPopup();
+  };
 
   // ============================================================
   // Init
@@ -197,6 +272,7 @@
       if (!liff.isLoggedIn()) liff.login();
       const profile = await liff.getProfile();
       userId = profile.userId;
+      await loadCheckinBranches();
     } catch (err) {
       showStatus('LIFF init failed: ' + err.message, 'error');
     }
@@ -208,27 +284,85 @@
   // ============================================================
   function requestGPS() {
     if (!navigator.geolocation) {
-      document.getElementById('gpsValue').textContent = '❌ ไม่รองรับ GPS';
+      document.getElementById('gpsValue').textContent = 'ไม่รองรับ GPS';
+      document.getElementById('branchName').textContent = 'ยังไม่ทราบสาขา';
+      document.getElementById('branchState').textContent = 'อุปกรณ์นี้ไม่รองรับ GPS';
+      document.getElementById('locationCard').classList.add('warn');
       return;
     }
     navigator.geolocation.getCurrentPosition(
       function(pos) {
         gpsCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        document.getElementById('gpsValue').textContent =
-          gpsCoords.lat.toFixed(5) + ', ' + gpsCoords.lng.toFixed(5);
-        document.getElementById('gpsBox').classList.add('ok');
+        document.getElementById('gpsValue').textContent = 'GPS พร้อมใช้งาน';
+        updateNearestBranch();
         checkCanSubmit();
       },
       function(err) {
-        let msg = '❌ ';
+        let msg = '';
         if (err.code === 1) msg += 'ต้องเปิด GPS permission';
         else if (err.code === 3) msg += 'GPS timeout — ออกไปที่โล่ง';
         else msg += 'GPS error';
         document.getElementById('gpsValue').textContent = msg;
-        document.getElementById('gpsBox').classList.add('warn');
+        document.getElementById('branchName').textContent = 'ยังไม่ทราบสาขา';
+        document.getElementById('branchState').textContent = 'ต้องเปิด GPS ก่อนลงเวลา';
+        document.getElementById('locationCard').classList.add('warn');
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
+  }
+
+  async function loadCheckinBranches() {
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'checkin_branches' })
+      });
+      const json = await res.json();
+      if (json.ok && Array.isArray(json.branches)) {
+        checkinBranches = json.branches;
+        updateNearestBranch();
+      }
+    } catch (err) {
+      console.warn('loadCheckinBranches failed', err);
+    }
+  }
+
+  function updateNearestBranch() {
+    if (!gpsCoords || !checkinBranches.length) return;
+    let nearest = null;
+    checkinBranches.forEach(function(branch) {
+      const distance = haversineMeters(gpsCoords.lat, gpsCoords.lng, Number(branch.lat), Number(branch.lng));
+      const item = {
+        name: branch.name,
+        radius: Number(branch.radius || 50),
+        distance: distance
+      };
+      if (!nearest || item.distance < nearest.distance) nearest = item;
+    });
+    if (!nearest) return;
+
+    const inRange = nearest.distance <= nearest.radius;
+    const card = document.getElementById('locationCard');
+    card.classList.remove('ok', 'warn');
+    card.classList.add(inRange ? 'ok' : 'warn');
+    document.getElementById('branchName').textContent = nearest.name;
+    document.getElementById('branchState').textContent = inRange
+      ? 'พร้อมลงเวลา'
+      : 'อยู่นอกรัศมี ' + Math.round(nearest.radius) + ' เมตร';
+  }
+
+  function haversineMeters(lat1, lng1, lat2, lng2) {
+    const R = 6371e3;
+    const toRad = function(deg) { return deg * Math.PI / 180; };
+    const p1 = toRad(lat1);
+    const p2 = toRad(lat2);
+    const dp = toRad(lat2 - lat1);
+    const dl = toRad(lng2 - lng1);
+    const a = Math.sin(dp / 2) * Math.sin(dp / 2) +
+      Math.cos(p1) * Math.cos(p2) *
+      Math.sin(dl / 2) * Math.sin(dl / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   }
 
   // ============================================================
@@ -267,8 +401,8 @@
       ? gpsCoords.lat.toFixed(5) + ', ' + gpsCoords.lng.toFixed(5)
       : 'GPS unavailable';
 
-    ctx.fillText('🕐 ' + datetime, 14, canvas.height - barH + barH * 0.4);
-    ctx.fillText('📍 ' + gpsTxt, 14, canvas.height - barH + barH * 0.75);
+    ctx.fillText('เวลา ' + datetime, 14, canvas.height - barH + barH * 0.4);
+    ctx.fillText('GPS ' + gpsTxt, 14, canvas.height - barH + barH * 0.75);
 
     const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
     imageBase64 = dataUrl.split(',')[1];
@@ -322,19 +456,23 @@
       const json = await res.json();
 
       if (json.ok) {
-        if (json.inRange) {
-          showStatus('✅ ลงเวลาเรียบร้อย (' + json.distance + ' m)', 'success');
+        if (json.duplicated) {
+          clearStatus();
+          showResultPopup('ลงเวลาแล้ว', json.message || 'คุณเช็คอินช่วงนี้ของวันนี้แล้ว', 'info', true);
+        } else if (json.inRange) {
+          clearStatus();
+          showResultPopup('บันทึกสำเร็จ', 'ลงเวลาเรียบร้อย\nสาขา: ' + (json.branchName || '-') + '\nระยะ: ' + json.distance + ' m', 'check_circle', false);
         } else {
-          showStatus('⚠️ บันทึกแล้ว แต่อยู่นอกรัศมี (' + json.distance + 'm > ' +
-                     json.radiusLimit + 'm)', 'error');
+          clearStatus();
+          showResultPopup('บันทึกแล้ว', 'สาขาใกล้สุด: ' + (json.branchName || '-') + '\nแต่อยู่นอกรัศมี (' + json.distance + 'm > ' +
+                     json.radiusLimit + 'm)', 'warning', true);
         }
-        setTimeout(function() { liff.closeWindow(); }, 2500);
       } else {
-        showStatus('❌ ' + (json.message || json.error), 'error');
+        showStatus(json.message || json.error, 'error');
         document.getElementById('btnSubmit').disabled = false;
       }
     } catch (err) {
-      showStatus('❌ ' + err.message, 'error');
+      showStatus(err.message, 'error');
       document.getElementById('btnSubmit').disabled = false;
     }
   }
@@ -343,6 +481,24 @@
     const el = document.getElementById('status');
     el.textContent = text;
     el.className = 'show ' + level;
+  }
+
+  function clearStatus() {
+    const el = document.getElementById('status');
+    el.textContent = '';
+    el.className = '';
+  }
+
+  function showResultPopup(title, message, icon, warn) {
+    document.getElementById('resultPopupTitle').textContent = title;
+    document.getElementById('resultPopupMessage').textContent = message;
+    document.querySelector('#resultPopupIcon .material-symbols-rounded').textContent = icon || 'check_circle';
+    document.getElementById('resultPopupIcon').className = warn ? 'popup-icon warn' : 'popup-icon';
+    document.getElementById('resultPopup').classList.add('show');
+  }
+
+  function hideResultPopup() {
+    document.getElementById('resultPopup').classList.remove('show');
   }
 </script>
 </body>

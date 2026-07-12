@@ -1,7 +1,7 @@
 # Mini HR App — Source Code Scaffolding
 
 > ระบบ HR สำหรับ SME ไทย ผ่าน LINE
-> Stack: Google Sheets · Apps Script · LINE Messaging API · LIFF
+> Stack: Vercel · Google Sheets · Apps Script · LINE Messaging API · LIFF
 >
 > **⚠️ DISCLAIMER:** code นี้คือ scaffolding/skeleton ที่ generate ตาม project spec — **ยังไม่ทดสอบบน production** มี TODO หลายจุด ใช้เป็นจุดเริ่มต้นสำหรับเรียนรู้และพัฒนาต่อ
 
@@ -127,7 +127,7 @@ LIFF_ID_RESPONSE = ...
 
 ระบบจะสร้าง 11 sheets + header columns ให้อัตโนมัติ
 
-### 6. Deploy as Web App
+### 6. Deploy Apps Script backend
 
 ```
 Deploy → New deployment
@@ -139,11 +139,35 @@ Deploy → New deployment
 
 ใส่ URL ใน LINE Developers → Messaging API → Webhook URL → Verify
 
-### 7. Setup LIFF
+### 7. Deploy LIFF frontend
 
-สร้าง 9 LIFF apps ใน LINE Developers (ตาม spec) — ใส่ LIFF endpoint URL ชี้ไปหา Apps Script Web App URL
+```bash
+npm run check
+vercel --prod
+```
 
-### 8. ลองเลย
+ตั้งค่า LIFF Endpoint URL ให้ชี้ไปยังโดเมน Vercel:
+
+```text
+/register
+/checkin
+/leave
+/ot
+/balance
+/hr-tools
+/approval-inbox
+/evidence
+/response
+```
+
+หน้า LIFF ต้องไม่ชี้ไปยัง Apps Script โดยตรง เพราะ Apps Script ครอบ HTML ด้วย iframe
+ซึ่งทำให้ LINE Login ใช้งานไม่ได้
+
+### 8. Setup LIFF
+
+สร้าง 9 LIFF apps ใน LINE Developers (ตาม spec) และใช้ Vercel production URL เป็น Endpoint
+
+### 9. ลองเลย
 
 - Add LINE OA เป็นเพื่อน
 - กด Rich Menu "ลงทะเบียน"

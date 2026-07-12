@@ -43,6 +43,23 @@
   #status.success { background: #1F7A1F; color: #fff; }
   #status.error { background: #B23A3A; color: #fff; }
   #status.loading { background: #F2A640; color: #fff; }
+  .popup-backdrop {
+    position: fixed; inset: 0; z-index: 10000; display: none;
+    align-items: center; justify-content: center; padding: 18px;
+    background: rgba(0, 0, 0, 0.42);
+  }
+  .popup-backdrop.show { display: flex; }
+  .popup {
+    width: 100%; max-width: 340px; background: #fff; border-radius: 18px;
+    padding: 22px; text-align: center; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+  }
+  .popup-title { font-size: 18px; font-weight: 900; margin-bottom: 6px; }
+  .popup-message { color: #666; font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
+  .popup-ok {
+    width: 100%; background: #D4550A; color: #fff; border: none;
+    border-radius: 10px; padding: 12px 14px; font-family: inherit;
+    font-size: 14px; font-weight: 800;
+  }
 </style>
 </head>
 <body>
@@ -69,9 +86,17 @@
 <button class="btn-submit" id="btnSubmit" disabled>ส่งหลักฐาน</button>
 <div id="status"></div>
 
+<div class="popup-backdrop" id="resultPopup" role="dialog" aria-modal="true" aria-labelledby="resultPopupTitle">
+  <div class="popup">
+    <div class="popup-title" id="resultPopupTitle">ส่งหลักฐานสำเร็จ</div>
+    <div class="popup-message" id="resultPopupMessage">ส่งหลักฐานเรียบร้อย</div>
+    <button class="popup-ok" id="resultPopupOk" type="button">ตกลง</button>
+  </div>
+</div>
+
 <script>
-  const LIFF_ID = '{{LIFF_ID}}';
-  const APPS_SCRIPT_URL = '{{SCRIPT_URL}}';
+  const LIFF_ID = '<?= LIFF_ID ?>';
+  const APPS_SCRIPT_URL = '<?= SCRIPT_URL ?>';
   let userId = null;
   let imageBase64 = null;
 
@@ -140,21 +165,41 @@
       });
       const json = await res.json();
       if (json.ok) {
-        showStatus('✅ ส่งหลักฐานเรียบร้อย', 'success');
-        setTimeout(function() { liff.closeWindow(); }, 2000);
+        clearStatus();
+        showResultPopup('ส่งหลักฐานสำเร็จ', 'ส่งหลักฐานเรียบร้อย');
       } else {
-        showStatus('❌ ' + (json.message || json.error), 'error');
+        showStatus(json.message || json.error, 'error');
         document.getElementById('btnSubmit').disabled = false;
       }
     } catch (err) {
-      showStatus('❌ ' + err.message, 'error');
+      showStatus(err.message, 'error');
       document.getElementById('btnSubmit').disabled = false;
     }
+  };
+  document.getElementById('resultPopupOk').onclick = function() {
+    hideResultPopup();
+    window.location.href = '/';
   };
 
   function showStatus(t, l) {
     const el = document.getElementById('status');
     el.textContent = t; el.className = 'show ' + l;
+  }
+
+  function clearStatus() {
+    const el = document.getElementById('status');
+    el.textContent = '';
+    el.className = '';
+  }
+
+  function showResultPopup(title, message) {
+    document.getElementById('resultPopupTitle').textContent = title;
+    document.getElementById('resultPopupMessage').textContent = message;
+    document.getElementById('resultPopup').classList.add('show');
+  }
+
+  function hideResultPopup() {
+    document.getElementById('resultPopup').classList.remove('show');
   }
 </script>
 </body>

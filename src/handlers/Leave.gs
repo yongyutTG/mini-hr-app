@@ -14,7 +14,9 @@ function submitLeave(payload) {
   const durationType = payload.durationType;
   const startDate = payload.startDate;
   const endDate = payload.endDate || payload.startDate;
-  const totalHours = payload.totalHours ? Number(payload.totalHours) : null;
+  const startTime = payload.startTime || '';
+  const endTime = payload.endTime || '';
+  let totalHours = payload.totalHours ? Number(payload.totalHours) : null;
   const reason = (payload.reason || '').trim();
   const evidenceBase64 = payload.evidenceBase64;
 
@@ -39,7 +41,13 @@ function submitLeave(payload) {
   } else if (durationType === 'half_day_morning' || durationType === 'half_day_afternoon') {
     totalDays = 0.5;
   } else if (durationType === 'hourly') {
-    if (!totalHours || totalHours <= 0) return { ok: false, error: 'missing_hours' };
+    if (!startTime || !endTime) return { ok: false, error: 'missing_time' };
+    const startMin = parseHHMM(startTime);
+    const endMin = parseHHMM(endTime);
+    if (endMin <= startMin) {
+      return { ok: false, error: 'invalid_time_range', message: 'เวลาสิ้นสุดต้องหลังเวลาเริ่ม' };
+    }
+    totalHours = (endMin - startMin) / 60;
     totalDays = totalHours / 8; // assume 8-hour workday
   }
 
@@ -101,6 +109,8 @@ function submitLeave(payload) {
     duration_type: durationType,
     start_date: startDate,
     end_date: endDate,
+    start_time: startTime,
+    end_time: endTime,
     total_days: totalDays,
     total_hours: totalHours || '',
     reason: reason,
@@ -135,6 +145,71 @@ function submitLeave(payload) {
 
   logUserAction('submitLeave', lineUserId, 'success', { leaveId, leaveType, totalDays });
   return { ok: true, leaveId: leaveId, status: 'pending_L1' };
+}
+
+function cancelLeave(payload) {
+  const lineUserId = payload.lineUserId;
+  const leaveId = payload.leaveId;
+
+  if (!lineUserId) return { ok: false, error: 'missing_line_user_id' };
+  if (!leaveId) return { ok: false, error: 'missing_leave_id' };
+
+  const emp = findEmployeeByLineId(lineUserId);
+  if (!emp) return { ok: false, error: 'not_registered' };
+
+  const leave = findLeaveById(leaveId);
+  if (!leave) return { ok: false, error: 'leave_not_found', message: 'ไม่พบใบลา' };
+  if (leave.employee_id !== emp.employee_id) {
+    return { ok: false, error: 'forbidden', message: 'ยกเลิกได้เฉพาะใบลาของตัวเอง' };
+  }
+  if (String(leave.status).indexOf('pending') !== 0) {
+    return {
+      ok: false,
+      error: 'not_cancelable',
+      message: 'ยกเลิกได้เฉพาะใบลาที่ยังรออนุมัติเท่านั้น'
+    };
+  }
+
+  const history = parseHistory(leave.approval_history);
+  history.push({
+    by: emp.employee_id,
+    by_name: emp.display_name,
+    action: 'cancel',
+    at: nowBangkok()
+  });
+
+  updateRowByNumber(SHEETS.LEAVES.name, leave._row, {
+    status: 'canceled',
+    current_approver: '',
+    approval_history: JSON.stringify(history)
+  });
+
+  try {
+    if (leave.current_approver) {
+      const approver = findEmployeeById(leave.current_approver);
+      if (approver && approver.line_user_id) {
+        pushMessage(approver.line_user_id, [{
+          type: 'text',
+          text: 'พนักงานยกเลิกใบลา ' + leave.leave_id + '\n' +
+                emp.display_name + ' (' + emp.employee_id + ')'
+        }]);
+      }
+    }
+  } catch (err) {
+    logWarn('cancelLeave:notifyApprover', err.message, { leaveId: leaveId });
+  }
+
+  try {
+    pushMessage(lineUserId, [{
+      type: 'text',
+      text: 'ยกเลิกใบลา ' + leave.leave_id + ' เรียบร้อย'
+    }]);
+  } catch (err) {
+    logWarn('cancelLeave:notifyEmployee', err.message, { leaveId: leaveId });
+  }
+
+  logUserAction('cancelLeave', lineUserId, 'success', { leaveId: leaveId });
+  return { ok: true, leaveId: leaveId, status: 'canceled' };
 }
 
 function thaiLeaveType(type) {

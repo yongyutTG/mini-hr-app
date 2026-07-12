@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
+<title>โปรไฟล์ — Mini HR App</title>
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700;800&family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@24,500,1,0&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Noto Sans Thai', system-ui, sans-serif; background: #FFF8F0; padding: 16px; color: #1A1A1A; }
+  .header {
+    background: linear-gradient(135deg, #D4550A, #F28C28); color: #fff;
+    padding: 20px; border-radius: 16px; margin-bottom: 16px;
+  }
+  .header h1 { font-size: 22px; display: flex; align-items: center; gap: 8px; }
+  .header p { opacity: 0.9; font-size: 13px; margin-top: 4px; }
+  .material-symbols-rounded {
+    font-family: 'Material Symbols Rounded'; font-weight: 500; font-style: normal;
+    font-size: 22px; line-height: 1; letter-spacing: normal; text-transform: none;
+    display: inline-block; white-space: nowrap; word-wrap: normal; direction: ltr;
+    -webkit-font-feature-settings: 'liga'; -webkit-font-smoothing: antialiased;
+  }
+  .profile-head { background: #fff; padding: 16px; border-radius: 14px; margin-bottom: 12px; display: grid; grid-template-columns: 56px 1fr; gap: 12px; align-items: center; }
+  .avatar { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; background: #FFF3E6; display: none; }
+  .avatar-fallback { width: 56px; height: 56px; border-radius: 50%; background: #FFF3E6; color: #D4550A; display: grid; place-items: center; font-weight: 900; font-size: 22px; }
+  .name { font-size: 19px; font-weight: 900; }
+  .sub { color: #777; font-size: 13px; margin-top: 2px; }
+  .card { background: #fff; padding: 16px; border-radius: 12px; margin-bottom: 12px; }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .title { font-size: 13px; color: #777; font-weight: 800; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid #F0E0D0; }
+  .row:last-child { border-bottom: none; }
+  .lab { color: #555; font-size: 13px; }
+  .val { text-align: right; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+  .pill { display: inline-block; padding: 4px 9px; border-radius: 999px; background: #FFF3E6; color: #D4550A; font-size: 12px; font-weight: 800; margin: 3px 3px 0 0; }
+  .ok { color: #1F7A1F; }
+  .bad { color: #B23A3A; }
+  .hint { color: #777; font-size: 12px; line-height: 1.6; margin-top: 8px; }
+  .edit-form { display: none; margin-top: 10px; }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; color: #555; font-size: 13px; font-weight: 800; margin-bottom: 5px; }
+  .field input, .field select {
+    width: 100%; padding: 12px; border: 1px solid #E0D0C0; border-radius: 10px;
+    font-family: inherit; font-size: 15px; background: #fff;
+  }
+  .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+  button { font-family: inherit; cursor: pointer; }
+  .btn { border: none; border-radius: 10px; padding: 11px 14px; font-weight: 800; font-size: 14px; }
+  .btn-edit { background: #FFF3E6; color: #D4550A; }
+  .btn-save { background: #D4550A; color: #fff; }
+  .btn-cancel { background: #EEE; color: #333; }
+  .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  #status {
+    display: none; margin-bottom: 12px; padding: 12px; border-radius: 10px;
+    text-align: center; font-size: 13px; font-weight: 800;
+  }
+  #status.show { display: block; }
+  #status.success { background: #E9F8E9; color: #1F7A1F; }
+  #status.error { background: #FFF0F0; color: #B23A3A; }
+  #status.loading { background: #FFF3E6; color: #D4550A; }
+  .popup-backdrop {
+    position: fixed; inset: 0; z-index: 10000; display: none;
+    align-items: center; justify-content: center; padding: 18px;
+    background: rgba(0, 0, 0, 0.42);
+  }
+  .popup-backdrop.show { display: flex; }
+  .popup {
+    width: 100%; max-width: 340px; background: #fff; border-radius: 18px;
+    padding: 22px; text-align: center; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+  }
+  .popup-icon {
+    width: 54px; height: 54px; margin: 0 auto 10px; border-radius: 50%;
+    display: grid; place-items: center; background: #E9F8E9; color: #1F7A1F;
+  }
+  .popup-icon .material-symbols-rounded { font-size: 32px; }
+  .popup-title { font-size: 18px; font-weight: 900; margin-bottom: 6px; }
+  .popup-message { color: #666; font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
+  .popup-ok { width: 100%; background: #D4550A; color: #fff; }
+  #loading { text-align: center; padding: 40px; color: #999; }
+  #content { display: none; }
+</style>
+</head>
+<body>
+<div id="loading">กำลังโหลดโปรไฟล์...</div>
+
+<div id="content">
+  <div class="header">
+    <h1><span class="material-symbols-rounded" aria-hidden="true">badge</span>โปรไฟล์</h1>
+    <p>ตรวจสอบข้อมูลพนักงานและแก้ไขข้อมูลติดต่อของบัญชี LINE นี้</p>
+  </div>
+
+  <div id="status"></div>
+
+  <div class="profile-head">
+    <img class="avatar" id="avatar" alt="LINE profile">
+    <div class="avatar-fallback" id="avatarFallback">HR</div>
+    <div>
+      <div class="name" id="empName">-</div>
+      <div class="sub" id="empSub">-</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-head">
+      <div class="title">ข้อมูลพนักงาน</div>
+      <button class="btn btn-edit" id="btnEdit" type="button">แก้ไขข้อมูล</button>
+    </div>
+    <div id="profileView">
+      <div class="row"><span class="lab">รหัสพนักงาน</span><span class="val" id="empId">-</span></div>
+      <div class="row"><span class="lab">แผนก</span><span class="val" id="department">-</span></div>
+      <div class="row"><span class="lab">ตำแหน่ง</span><span class="val" id="position">-</span></div>
+      <div class="row"><span class="lab">เบอร์โทร</span><span class="val" id="phone">-</span></div>
+      <div class="row"><span class="lab">อีเมล</span><span class="val" id="email">-</span></div>
+      <div class="row"><span class="lab">ธนาคาร</span><span class="val" id="bankName">-</span></div>
+      <div class="row"><span class="lab">เลขที่บัญชี</span><span class="val" id="bankAccountNo">-</span></div>
+      <div class="row"><span class="lab">ชื่อบัญชี</span><span class="val" id="bankAccountName">-</span></div>
+      <div class="row"><span class="lab">วันที่เริ่มงาน</span><span class="val" id="startDate">-</span></div>
+      <div class="row"><span class="lab">สถานะบัญชี</span><span class="val" id="activeStatus">-</span></div>
+    </div>
+
+    <form class="edit-form" id="editForm">
+      <div class="field"><label for="editPhone">เบอร์โทร</label><input id="editPhone" type="tel" inputmode="tel" placeholder="0812345678"></div>
+      <div class="field"><label for="editEmail">อีเมล</label><input id="editEmail" type="email" placeholder="name@example.com"></div>
+      <div id="bankFields">
+        <div class="field"><label for="editBankName">ธนาคาร</label>
+          <input id="editBankName" list="bankOptions" placeholder="เช่น กสิกรไทย (KBANK)">
+          <datalist id="bankOptions">
+            <option value="กสิกรไทย (KBANK)">
+            <option value="ไทยพาณิชย์ (SCB)">
+            <option value="กรุงเทพ (BBL)">
+            <option value="กรุงไทย (KTB)">
+            <option value="กรุงศรี (BAY)">
+            <option value="ทหารไทยธนชาต (TTB)">
+            <option value="ออมสิน (GSB)">
+          </datalist>
+        </div>
+        <div class="field"><label for="editBankAccountNo">เลขที่บัญชี</label><input id="editBankAccountNo" inputmode="numeric" placeholder="123-4-56789-0"></div>
+        <div class="field"><label for="editBankAccountName">ชื่อบัญชี</label><input id="editBankAccountName" placeholder="ชื่อ-นามสกุล"></div>
+      </div>
+      <div class="hint" id="bankDisabledHint" style="display:none;">บริษัทไม่ได้เปิดให้พนักงานแก้ไขบัญชีธนาคารเอง กรุณาแจ้ง HR/admin</div>
+      <div class="actions">
+        <button class="btn btn-cancel" id="btnCancel" type="button">ยกเลิก</button>
+        <button class="btn btn-save" id="btnSave" type="submit">บันทึก</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="title">สิทธิ์และผู้อนุมัติ</div>
+    <div class="row"><span class="lab">Role หลัก</span><span class="val" id="role">-</span></div>
+    <div class="row"><span class="lab">สิทธิ์ที่มี</span><span class="val" id="roles">-</span></div>
+    <div class="row"><span class="lab">ผู้อนุมัติ</span><span class="val" id="approver">-</span></div>
+    <div class="row"><span class="lab">LINE ผูกบัญชี</span><span class="val" id="lineLinked">-</span></div>
+    <div class="hint">ข้อมูลแผนก ตำแหน่ง role หรือผู้อนุมัติ ต้องให้ HR/admin แก้ในเมนูเครื่องมือ HR</div>
+  </div>
+</div>
+
+<div class="popup-backdrop" id="successPopup" role="dialog" aria-modal="true" aria-labelledby="successPopupTitle">
+  <div class="popup">
+    <div class="popup-icon"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span></div>
+    <div class="popup-title" id="successPopupTitle">บันทึกสำเร็จ</div>
+    <div class="popup-message" id="successPopupMessage">บันทึกข้อมูลโปรไฟล์เรียบร้อย</div>
+    <button class="btn popup-ok" id="successPopupOk" type="button">ตกลง</button>
+  </div>
+</div>
+
+<script>
+  const LIFF_ID = '<?= LIFF_ID ?>';
+  const APPS_SCRIPT_URL = '<?= SCRIPT_URL ?>';
+
+  let lineUserId = '';
+  let currentData = null;
+
+  document.getElementById('btnEdit').onclick = function() {
+    enterEditMode();
+  };
+  document.getElementById('btnCancel').onclick = function() {
+    exitEditMode();
+  };
+  document.getElementById('editForm').onsubmit = async function(e) {
+    e.preventDefault();
+    await saveProfile();
+  };
+  document.getElementById('successPopupOk').onclick = function() {
+    hideSuccessPopup();
+  };
+  document.getElementById('successPopup').onclick = function(e) {
+    if (e.target.id === 'successPopup') hideSuccessPopup();
+  };
+
+  (async function init() {
+    try {
+      await liff.init({ liffId: LIFF_ID });
+      if (!liff.isLoggedIn()) {
+        liff.login({ redirectUri: window.location.href.split('#')[0] });
+        return;
+      }
+      const lineProfile = await liff.getProfile();
+      lineUserId = lineProfile.userId;
+      renderLineProfile(lineProfile);
+      await loadProfile();
+    } catch (err) {
+      document.getElementById('loading').textContent = 'โหลดโปรไฟล์ไม่ได้: ' + err.message;
+    }
+  })();
+
+  async function loadProfile() {
+    const json = await api({ action: 'employee_profile' });
+    if (!json.ok) throw new Error(json.message || json.error);
+    render(json);
+  }
+
+  async function saveProfile() {
+    const canEditBank = currentData && currentData.permissions && currentData.permissions.canEditBank;
+    const payload = {
+      action: 'employee_profile_update',
+      phone: document.getElementById('editPhone').value.trim(),
+      email: document.getElementById('editEmail').value.trim()
+    };
+    if (canEditBank) {
+      payload.bankName = document.getElementById('editBankName').value.trim();
+      payload.bankAccountNo = document.getElementById('editBankAccountNo').value.trim();
+      payload.bankAccountName = document.getElementById('editBankAccountName').value.trim();
+    }
+
+    setStatus('กำลังบันทึก...', 'loading');
+    document.getElementById('btnSave').disabled = true;
+    try {
+      const json = await api(payload);
+      if (!json.ok) throw new Error(json.message || json.error);
+      await loadProfile();
+      exitEditMode();
+      clearStatus();
+      showSuccessPopup('บันทึกข้อมูลโปรไฟล์เรียบร้อย');
+    } catch (err) {
+      setStatus(err.message, 'error');
+    } finally {
+      document.getElementById('btnSave').disabled = false;
+    }
+  }
+
+  async function api(payload) {
+    payload.lineUserId = lineUserId;
+    if (window.liff && liff.isLoggedIn()) payload.lineAccessToken = liff.getAccessToken();
+
+    const res = await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(payload)
+    });
+    return res.json();
+  }
+
+  function renderLineProfile(profile) {
+    if (!profile) return;
+    if (profile.pictureUrl) {
+      document.getElementById('avatar').src = profile.pictureUrl;
+      document.getElementById('avatar').style.display = 'block';
+      document.getElementById('avatarFallback').style.display = 'none';
+    }
+  }
+
+  function render(data) {
+    currentData = data;
+    const e = data.employee || {};
+    const a = data.approver || {};
+    const canEditBank = data.permissions && data.permissions.canEditBank;
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+
+    setText('empName', e.name);
+    setText('empSub', [e.id, e.department, e.position].filter(Boolean).join(' · '));
+    setText('empId', e.id);
+    setText('department', e.department);
+    setText('position', e.position);
+    setText('phone', e.phone);
+    setText('email', e.email);
+    setText('bankName', e.bankName);
+    setText('bankAccountNo', maskBankAccount(e.bankAccountNo));
+    setText('bankAccountName', e.bankAccountName);
+    setText('startDate', e.startDate);
+    document.getElementById('activeStatus').innerHTML = e.isActive
+      ? '<span class="ok">Active</span>'
+      : '<span class="bad">Inactive</span>';
+    setText('role', e.role);
+    document.getElementById('roles').innerHTML = (data.roles || []).map(function(r) {
+      return '<span class="pill">' + escapeHtml(r) + '</span>';
+    }).join('') || '-';
+    setText('approver', a.id ? (a.id + (a.name ? ' · ' + a.name : '')) : 'ยังไม่ได้ตั้งผู้อนุมัติ');
+    setText('lineLinked', data.line && data.line.linked ? 'เชื่อมแล้ว (...' + data.line.userIdTail + ')' : 'ยังไม่เชื่อม');
+
+    document.getElementById('editPhone').value = e.phone || '';
+    document.getElementById('editEmail').value = e.email || '';
+    document.getElementById('editBankName').value = e.bankName || '';
+    document.getElementById('editBankAccountNo').value = e.bankAccountNo || '';
+    document.getElementById('editBankAccountName').value = e.bankAccountName || '';
+    document.getElementById('bankFields').style.display = canEditBank ? 'block' : 'none';
+    document.getElementById('bankDisabledHint').style.display = canEditBank ? 'none' : 'block';
+  }
+
+  function enterEditMode() {
+    clearStatus();
+    document.getElementById('profileView').style.display = 'none';
+    document.getElementById('editForm').style.display = 'block';
+    document.getElementById('btnEdit').style.display = 'none';
+  }
+
+  function exitEditMode() {
+    document.getElementById('profileView').style.display = 'block';
+    document.getElementById('editForm').style.display = 'none';
+    document.getElementById('btnEdit').style.display = 'inline-block';
+  }
+
+  function setText(id, value) {
+    document.getElementById(id).textContent = value || '-';
+  }
+
+  function setStatus(text, level) {
+    const el = document.getElementById('status');
+    el.textContent = text;
+    el.className = 'show ' + level;
+  }
+
+  function clearStatus() {
+    const el = document.getElementById('status');
+    el.textContent = '';
+    el.className = '';
+  }
+
+  function showSuccessPopup(message) {
+    document.getElementById('successPopupMessage').textContent = message || 'บันทึกข้อมูลโปรไฟล์เรียบร้อย';
+    document.getElementById('successPopup').classList.add('show');
+  }
+
+  function hideSuccessPopup() {
+    document.getElementById('successPopup').classList.remove('show');
+  }
+
+  function maskBankAccount(value) {
+    value = String(value || '').trim();
+    if (!value) return '';
+    if (value.length <= 4) return value;
+    return '•••• ' + value.slice(-4);
+  }
+
+  function escapeHtml(value) {
+    return String(value === null || value === undefined ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+</script>
+</body>
+</html>

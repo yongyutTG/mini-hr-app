@@ -12,7 +12,14 @@ const LINE_API_BASE = 'https://api.line.me';
  * @param {Array} messages - array of message objects
  */
 function pushMessage(to, messages) {
-  const token = getProp('LINE_CHANNEL_ACCESS_TOKEN');
+  const token = getPropOptional('LINE_CHANNEL_ACCESS_TOKEN', '');
+  if (!token || !to) {
+    logWarn('pushMessage', 'line_notification_skipped', {
+      hasToken: Boolean(token),
+      hasRecipient: Boolean(to)
+    });
+    return { ok: false, skipped: true, error: 'line_not_configured' };
+  }
   const url = LINE_API_BASE + '/v2/bot/message/push';
 
   const payload = {
@@ -33,7 +40,14 @@ function pushMessage(to, messages) {
  * Reply to a webhook event using replyToken
  */
 function replyMessage(replyToken, messages) {
-  const token = getProp('LINE_CHANNEL_ACCESS_TOKEN');
+  const token = getPropOptional('LINE_CHANNEL_ACCESS_TOKEN', '');
+  if (!token || !replyToken) {
+    logWarn('replyMessage', 'line_reply_skipped', {
+      hasToken: Boolean(token),
+      hasReplyToken: Boolean(replyToken)
+    });
+    return { ok: false, skipped: true, error: 'line_not_configured' };
+  }
   const url = LINE_API_BASE + '/v2/bot/message/reply';
 
   const payload = {
@@ -65,7 +79,7 @@ function pushFlex(to, altText, flexContents) {
  * Push flex card to owner (HR/admin)
  */
 function pushFlexToOwner(altText, flexContents) {
-  const ownerId = getProp('OWNER_LINE_USER_ID');
+  const ownerId = getPropOptional('OWNER_LINE_USER_ID', '');
   return pushFlex(ownerId, altText, flexContents);
 }
 

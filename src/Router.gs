@@ -7,10 +7,16 @@
 const ACTION_HANDLERS = {
   // Employee actions
   'register':       function(p) { return register(p); },
+  'checkin_branches': function(p) { return getCheckinBranchOptions(); },
   'checkin':        function(p) { return checkin(p); },
   'leave':          function(p) { return submitLeave(p); },
+  'cancel_leave':   function(p) { return cancelLeave(p); },
   'ot':             function(p) { return submitOT(p); },
   'balance':        function(p) { return getBalance(p); },
+  'leave_history':  function(p) { return getEmployeeLeaveHistory(p); },
+  'employee_profile': function(p) { return getEmployeeProfile(p); },
+  'employee_profile_update': function(p) { return updateEmployeeProfile(p); },
+  'user_context':   function(p) { return getUserContext(p); },
   'evidence':       function(p) { return submitEvidence(p); },
 
   // Approver actions

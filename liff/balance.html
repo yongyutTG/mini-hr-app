@@ -14,8 +14,18 @@
   }
   .header h1 { font-size: 22px; }
   .header .name { font-size: 14px; opacity: 0.9; margin-top: 4px; }
+  .page-title, .icon-title {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .icon-title .material-symbols-rounded { color: #D4550A; }
   .card { background: #fff; padding: 18px; border-radius: 12px; margin-bottom: 12px; }
   .card .title { font-size: 13px; color: #777; margin-bottom: 10px; }
+  .period-card { padding: 14px; }
+  .period-card label { display: block; color: #777; font-size: 12px; font-weight: 800; margin-bottom: 6px; }
+  .period-card input {
+    width: 100%; padding: 12px; border: 1px solid #E0D0C0; border-radius: 10px;
+    font-family: inherit; font-size: 15px; background: #fff;
+  }
   .big-amount { font-size: 38px; font-weight: 900; color: #D4550A; }
   .vat { font-size: 12px; color: #999; margin-top: 4px; }
   .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px; }
@@ -37,6 +47,42 @@
     display: inline-block; background: #F2A640; color: #fff;
     padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 700;
   }
+  .history-item { padding: 12px 0; border-bottom: 1px solid #F0E0D0; }
+  .history-item:last-child { border-bottom: none; }
+  .history-top { display: flex; justify-content: space-between; gap: 8px; align-items: flex-start; }
+  .history-id { font-size: 12px; color: #999; }
+  .history-name { font-size: 15px; font-weight: 800; margin-top: 2px; }
+  .history-meta { font-size: 12px; color: #555; margin-top: 4px; line-height: 1.5; }
+  .history-reason { font-size: 12px; color: #777; margin-top: 6px; line-height: 1.5; }
+  .history-actions { margin-top: 10px; }
+  .cancel-leave-btn {
+    border: 0; border-radius: 10px; background: #B23A3A; color: #fff;
+    font-family: inherit; font-size: 13px; font-weight: 800; padding: 9px 12px;
+  }
+  .status-pill { flex: 0 0 auto; padding: 4px 8px; border-radius: 999px; font-size: 11px; font-weight: 800; color: #fff; }
+  .status-pending { background: #F2A640; }
+  .status-approved { background: #1F7A1F; }
+  .status-rejected { background: #B23A3A; }
+  .status-info { background: #777; }
+  .empty-history { padding: 18px 0; text-align: center; color: #999; font-size: 13px; }
+  .popup-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.42); z-index: 10000;
+    display: none; align-items: center; justify-content: center; padding: 18px;
+  }
+  .popup-backdrop.show { display: flex; }
+  .popup {
+    width: min(360px, 100%); background: #fff; border-radius: 18px; padding: 22px;
+    text-align: center; box-shadow: 0 18px 48px rgba(0,0,0,.22);
+  }
+  .popup-title { font-size: 18px; font-weight: 900; margin-bottom: 8px; }
+  .popup-message { color: #666; font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
+  .popup-actions { display: flex; gap: 8px; }
+  .popup-actions button {
+    flex: 1; border: 0; border-radius: 12px; padding: 12px; font-family: inherit;
+    font-weight: 800; font-size: 14px;
+  }
+  .popup-cancel { background: #eee; color: #333; }
+  .popup-ok { background: #D4550A; color: #fff; }
   #loading { text-align: center; padding: 40px; color: #999; }
 </style>
 </head>
@@ -45,12 +91,17 @@
 
 <div id="content" style="display:none;">
   <div class="header">
-    <h1>💰 ดูยอด</h1>
+    <h1 class="page-title"><span class="material-symbols-rounded">account_balance_wallet</span>ดูยอด</h1>
     <div class="name" id="empName">-</div>
   </div>
 
+  <div class="card period-card">
+    <label for="periodPicker">เลือกเดือน/ปี</label>
+    <input type="month" id="periodPicker">
+  </div>
+
   <div class="card">
-    <div class="title">ยอดประมาณการเดือนนี้ (<span id="period">-</span>)</div>
+    <div class="title icon-title"><span class="material-symbols-rounded">payments</span>ยอดประมาณการเดือนนี้ (<span id="period">-</span>)</div>
     <div class="big-amount" id="estimate">฿0</div>
     <div class="vat">ค่าจ้าง + OT - หัก</div>
     <div class="stats">
@@ -61,7 +112,7 @@
   </div>
 
   <div class="card">
-    <div class="title">รายละเอียดประมาณการ</div>
+    <div class="title icon-title"><span class="material-symbols-rounded">receipt_long</span>รายละเอียดประมาณการ</div>
     <div class="row"><span class="lab">ค่าจ้างพื้นฐาน</span><span class="val" id="basePay">฿0</span></div>
     <div class="row"><span class="lab">ค่า OT</span><span class="val" id="otPay">฿0</span></div>
     <div class="row"><span class="lab">เงินเพิ่ม</span><span class="val green" id="bonus">฿0</span></div>
@@ -90,26 +141,51 @@
   </div>
 
   <div class="card" id="lastPaymentCard" style="display:none;">
-    <div class="title">งวดล่าสุด</div>
+    <div class="title icon-title"><span class="material-symbols-rounded">history</span>งวดล่าสุด</div>
     <div class="row"><span class="lab" id="lastPeriod">-</span><span class="val" id="lastTotal">-</span></div>
     <div class="row"><span class="lab">สถานะ</span><span class="val" id="lastStatus">-</span></div>
+  </div>
+
+  <div class="card">
+    <div class="title icon-title"><span class="material-symbols-rounded">history</span>ประวัติการลา</div>
+    <div id="leaveHistory"></div>
+  </div>
+</div>
+
+<div class="popup-backdrop" id="popup" role="dialog" aria-modal="true">
+  <div class="popup">
+    <div class="popup-title" id="popupTitle">แจ้งเตือน</div>
+    <div class="popup-message" id="popupMessage"></div>
+    <div class="popup-actions" id="popupActions">
+      <button class="popup-ok" id="popupOk" type="button">ตกลง</button>
+    </div>
   </div>
 </div>
 
 <script>
-  const LIFF_ID = '{{LIFF_ID}}';
-  const APPS_SCRIPT_URL = '{{SCRIPT_URL}}';
+  const LIFF_ID = '<?= LIFF_ID ?>';
+  const APPS_SCRIPT_URL = '<?= SCRIPT_URL ?>';
+  let userId = null;
+  let pendingCancelLeaveId = '';
 
   (async function init() {
     await liff.init({ liffId: LIFF_ID });
     if (!liff.isLoggedIn()) liff.login();
     const profile = await liff.getProfile();
-    const userId = profile.userId;
+    userId = profile.userId;
+    document.getElementById('periodPicker').value = currentPeriod();
+    document.getElementById('periodPicker').onchange = loadBalance;
+    await loadBalance();
+  })();
 
+  async function loadBalance() {
+    document.getElementById('loading').style.display = 'block';
+    document.getElementById('content').style.display = 'none';
     try {
+      const period = document.getElementById('periodPicker').value || currentPeriod();
       const res = await fetch(APPS_SCRIPT_URL, {
         method: 'POST', headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'balance', lineUserId: userId })
+        body: JSON.stringify({ action: 'balance', lineUserId: userId, period: period })
       });
       const json = await res.json();
       if (!json.ok) { alert(json.error); return; }
@@ -117,11 +193,12 @@
     } catch (err) {
       alert('โหลดข้อมูลไม่ได้: ' + err.message);
     }
-  })();
+  }
 
   function render(d) {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('content').style.display = 'block';
+    document.getElementById('periodPicker').value = d.period;
 
     document.getElementById('empName').textContent =
       d.employee.id + ' · ' + d.employee.name;
@@ -150,6 +227,163 @@
         '฿' + Number(d.lastPayment.total).toLocaleString();
       document.getElementById('lastStatus').textContent = d.lastPayment.status;
     }
+
+    renderLeaveHistory(d.leaveHistory || []);
+  }
+
+  function renderLeaveHistory(items) {
+    const el = document.getElementById('leaveHistory');
+    if (!items.length) {
+      el.innerHTML = '<div class="empty-history">ยังไม่มีประวัติการลา</div>';
+      return;
+    }
+
+    el.innerHTML = items.map(function(item) {
+      const dateText = item.start_date + (item.end_date && item.end_date !== item.start_date ? ' - ' + item.end_date : '');
+      const timeText = item.start_time && item.end_time ? ' · ' + item.start_time + '-' + item.end_time : '';
+      const hoursText = item.total_hours ? ' · ' + item.total_hours + ' ชม.' : '';
+      const reason = item.reason ? '<div class="history-reason">' + escapeHtml(item.reason) + '</div>' : '';
+      return '<div class="history-item">' +
+        '<div class="history-top">' +
+          '<div>' +
+            '<div class="history-id">' + escapeHtml(item.leave_id) + '</div>' +
+            '<div class="history-name">' + thaiLeaveType(item.leave_type) + '</div>' +
+          '</div>' +
+          '<span class="status-pill ' + statusClass(item.status) + '">' + thaiStatus(item.status) + '</span>' +
+        '</div>' +
+        '<div class="history-meta">' + escapeHtml(dateText + timeText + ' · ' + item.total_days + ' วัน' + hoursText) + '</div>' +
+        reason +
+      '</div>';
+    }).join('');
+  }
+
+  function renderLeaveHistory(items) {
+    const el = document.getElementById('leaveHistory');
+    if (!items.length) {
+      el.innerHTML = '<div class="empty-history">ยังไม่มีประวัติการลา</div>';
+      return;
+    }
+
+    el.innerHTML = items.map(function(item) {
+      const dateText = item.start_date + (item.end_date && item.end_date !== item.start_date ? ' - ' + item.end_date : '');
+      const timeText = item.start_time && item.end_time ? ' · ' + item.start_time + '-' + item.end_time : '';
+      const hoursText = item.total_hours ? ' · ' + item.total_hours + ' ชม.' : '';
+      const reason = item.reason ? '<div class="history-reason">' + escapeHtml(item.reason) + '</div>' : '';
+      const actions = item.can_cancel
+        ? '<div class="history-actions"><button class="cancel-leave-btn" type="button" data-leave-id="' + escapeHtml(item.leave_id) + '">ยกเลิกใบลา</button></div>'
+        : '';
+      return '<div class="history-item">' +
+        '<div class="history-top">' +
+          '<div>' +
+            '<div class="history-id">' + escapeHtml(item.leave_id) + '</div>' +
+            '<div class="history-name">' + thaiLeaveType(item.leave_type) + '</div>' +
+          '</div>' +
+          '<span class="status-pill ' + statusClass(item.status) + '">' + leaveHistoryStatusText(item.status) + '</span>' +
+        '</div>' +
+        '<div class="history-meta">' + escapeHtml(dateText + timeText + ' · ' + item.total_days + ' วัน' + hoursText) + '</div>' +
+        reason +
+        actions +
+      '</div>';
+    }).join('');
+
+    el.querySelectorAll('.cancel-leave-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        confirmCancelLeave(this.getAttribute('data-leave-id'));
+      });
+    });
+  }
+
+  function confirmCancelLeave(leaveId) {
+    pendingCancelLeaveId = leaveId;
+    showPopup('ยืนยันการยกเลิก', 'ต้องการยกเลิกใบลา ' + leaveId + ' ใช่หรือไม่?', true);
+  }
+
+  async function cancelLeave(leaveId) {
+    try {
+      const res = await fetch(APPS_SCRIPT_URL, {
+        method: 'POST', headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'cancel_leave', lineUserId: userId, leaveId: leaveId })
+      });
+      const json = await res.json();
+      if (!json.ok) {
+        showPopup('ยกเลิกไม่สำเร็จ', json.message || json.error || 'ไม่สามารถยกเลิกใบลาได้', false);
+        return;
+      }
+      showPopup('ยกเลิกสำเร็จ', 'ยกเลิกใบลาเรียบร้อย', false, loadBalance);
+    } catch (err) {
+      showPopup('เกิดข้อผิดพลาด', err.message, false);
+    }
+  }
+
+  function showPopup(title, message, confirmMode, onOk) {
+    const popup = document.getElementById('popup');
+    const actions = document.getElementById('popupActions');
+    document.getElementById('popupTitle').textContent = title;
+    document.getElementById('popupMessage').textContent = message;
+    actions.innerHTML = confirmMode
+      ? '<button class="popup-cancel" id="popupCancel" type="button">ไม่ใช่</button><button class="popup-ok" id="popupOk" type="button">ยืนยัน</button>'
+      : '<button class="popup-ok" id="popupOk" type="button">ตกลง</button>';
+    popup.classList.add('show');
+
+    document.getElementById('popupOk').onclick = function() {
+      popup.classList.remove('show');
+      if (confirmMode) cancelLeave(pendingCancelLeaveId);
+      else if (onOk) onOk();
+    };
+
+    const cancelBtn = document.getElementById('popupCancel');
+    if (cancelBtn) {
+      cancelBtn.onclick = function() {
+        pendingCancelLeaveId = '';
+        popup.classList.remove('show');
+      };
+    }
+  }
+
+  function leaveHistoryStatusText(status) {
+    if (String(status).indexOf('pending') === 0) return 'รออนุมัติ';
+    if (status === 'approved') return 'อนุมัติแล้ว';
+    if (status === 'rejected') return 'ปฏิเสธ';
+    if (status === 'canceled') return 'ยกเลิกแล้ว';
+    if (status === 'need_info') return 'ขอข้อมูลเพิ่ม';
+    return status || '-';
+  }
+
+  function thaiLeaveType(type) {
+    const map = {
+      sick: 'ลาป่วย',
+      personal: 'ลากิจ',
+      vacation: 'ลาพักร้อน',
+      unpaid: 'ลาไม่รับเงิน',
+      emergency: 'ลาฉุกเฉิน'
+    };
+    return map[type] || type || '-';
+  }
+
+  function thaiStatus(status) {
+    if (String(status).indexOf('pending') === 0) return 'รออนุมัติ';
+    if (status === 'approved') return 'อนุมัติแล้ว';
+    if (status === 'rejected') return 'ปฏิเสธ';
+    if (status === 'need_info') return 'ขอข้อมูลเพิ่ม';
+    return status || '-';
+  }
+
+  function statusClass(status) {
+    if (String(status).indexOf('pending') === 0) return 'status-pending';
+    if (status === 'approved') return 'status-approved';
+    if (status === 'rejected') return 'status-rejected';
+    return 'status-info';
+  }
+
+  function escapeHtml(value) {
+    return String(value === null || value === undefined ? '' : value)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
+  }
+
+  function currentPeriod() {
+    const now = new Date();
+    return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
   }
 </script>
 </body>

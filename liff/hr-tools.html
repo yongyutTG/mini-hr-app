@@ -36,10 +36,15 @@
 
   .emp-item {
     background: #fff; padding: 12px; border-radius: 8px; margin-bottom: 8px;
-    border-left: 4px solid #F28C28; cursor: pointer;
+    border-left: 4px solid #F28C28;
+    display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center;
   }
   .emp-item .name { font-weight: 700; font-size: 15px; }
   .emp-item .meta { font-size: 12px; color: #777; margin-top: 2px; }
+  .emp-edit-btn {
+    width: auto; min-width: 76px; margin: 0; padding: 9px 12px;
+    border-radius: 999px; font-size: 13px;
+  }
 
   .btn {
     background: #D4550A; color: #fff; border: none; padding: 12px 16px;
@@ -64,9 +69,32 @@
   .field input, .field select {
     width: 100%; padding: 10px; border: 1px solid #DDD; border-radius: 6px; font-size: 14px;
   }
+  .field .hint { color: #777; font-size: 11px; line-height: 1.5; margin-top: 4px; }
 
   .loading-state, .empty-state {
     text-align: center; padding: 40px; color: #999;
+  }
+  .popup-backdrop {
+    position: fixed; inset: 0; z-index: 10000; display: none;
+    align-items: center; justify-content: center; padding: 18px;
+    background: rgba(0, 0, 0, 0.42);
+  }
+  .popup-backdrop.show { display: flex; }
+  .popup {
+    width: 100%; max-width: 340px; background: #fff; border-radius: 18px;
+    padding: 22px; text-align: center; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+  }
+  .popup-icon {
+    width: 54px; height: 54px; margin: 0 auto 10px; border-radius: 50%;
+    display: grid; place-items: center; background: #E9F8E9; color: #1F7A1F;
+  }
+  .popup-icon .material-symbols-rounded { font-size: 32px; }
+  .popup-title { font-size: 18px; font-weight: 900; margin-bottom: 6px; }
+  .popup-message { color: #666; font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
+  .popup-ok {
+    width: 100%; background: #D4550A; color: #fff; border: none;
+    border-radius: 10px; padding: 12px 14px; font-family: inherit;
+    font-size: 14px; font-weight: 800; cursor: pointer;
   }
 </style>
 </head>
@@ -123,6 +151,11 @@
   <div class="modal">
     <h2 id="empModalTitle">แก้ไขพนักงาน</h2>
     <div class="field"><label>รหัส</label><input id="empId" readonly></div>
+    <div class="field">
+      <label>LINE User ID</label>
+      <input id="empLineUserId" placeholder="Uxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx">
+      <div class="hint">ใช้เมื่อพนักงานเปลี่ยนบัญชี LINE ใหม่ ห้ามใช้ซ้ำกับพนักงานคนอื่น</div>
+    </div>
     <div class="field"><label>ชื่อ-นามสกุล</label><input id="empName"></div>
     <div class="field"><label>เบอร์โทร</label><input id="empPhone"></div>
     <div class="field"><label>แผนก</label><input id="empDept"></div>
@@ -130,8 +163,14 @@
     <div class="field"><label>ค่าจ้าง/เดือน</label><input id="empBasePay" type="number"></div>
     <div class="field"><label>ค่า OT/ชม.</label><input id="empOtRate" type="number"></div>
     <div class="field"><label>ผู้อนุมัติ L1</label><select id="empApprover1"></select></div>
-    <div class="field"><label>ผู้อนุมัติ L2</label><select id="empApprover2"></select></div>
-    <div class="field"><label>ผู้อนุมัติ L3</label><select id="empApprover3"></select></div>
+    <div class="field"><label>สิทธิ์ระบบ</label>
+      <select id="empRole">
+        <option value="employee">พนักงาน</option>
+        <option value="approver">ผู้อนุมัติ</option>
+        <option value="hr">HR</option>
+        <option value="admin">Admin</option>
+      </select>
+    </div>
     <div class="field"><label>สถานะ</label>
       <select id="empActive">
         <option value="true">ใช้งาน</option>
@@ -143,11 +182,25 @@
   </div>
 </div>
 
+<div class="popup-backdrop" id="successPopup" role="dialog" aria-modal="true" aria-labelledby="successPopupTitle">
+  <div class="popup">
+    <div class="popup-icon"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span></div>
+    <div class="popup-title" id="successPopupTitle">บันทึกสำเร็จ</div>
+    <div class="popup-message" id="successPopupMessage">ดำเนินการเรียบร้อย</div>
+    <button class="popup-ok" id="successPopupOk" type="button">ตกลง</button>
+  </div>
+</div>
+
 <script>
-  const LIFF_ID = '{{LIFF_ID}}';
-  const APPS_SCRIPT_URL = '{{SCRIPT_URL}}';
+  const LIFF_ID = '<?= LIFF_ID ?>';
+  const APPS_SCRIPT_URL = '<?= SCRIPT_URL ?>';
   let userId = null;
   let employeesCache = [];
+
+  document.getElementById('successPopupOk').onclick = hideSuccessPopup;
+  document.getElementById('successPopup').onclick = function(e) {
+    if (e.target.id === 'successPopup') hideSuccessPopup();
+  };
 
   (async function init() {
     await liff.init({ liffId: LIFF_ID });
@@ -213,11 +266,19 @@
     employeesCache.forEach(function(emp) {
       const item = document.createElement('div');
       item.className = 'emp-item';
-      item.innerHTML =
-        '<div class="name">' + emp.display_name + ' (' + emp.employee_id + ')</div>' +
-        '<div class="meta">' + (emp.department || '-') + ' · ' + (emp.position || '-') +
+      const info = document.createElement('div');
+      info.className = 'emp-main';
+      info.innerHTML =
+        '<div class="name">' + escapeHtml(emp.display_name) + ' (' + escapeHtml(emp.employee_id) + ')</div>' +
+        '<div class="meta">' + escapeHtml(emp.department || '-') + ' · ' + escapeHtml(emp.position || '-') +
         ' · ' + (emp.is_active ? 'ใช้งาน' : 'ไม่ใช้งาน') + '</div>';
-      item.onclick = function() { openEmpModal(emp); };
+      const editBtn = document.createElement('button');
+      editBtn.className = 'btn emp-edit-btn';
+      editBtn.type = 'button';
+      editBtn.textContent = 'แก้ไข';
+      editBtn.onclick = function() { openEmpModal(emp); };
+      item.appendChild(info);
+      item.appendChild(editBtn);
       el.appendChild(item);
     });
   }
@@ -225,6 +286,7 @@
   function openEmpModal(emp) {
     document.getElementById('empModalTitle').textContent = 'แก้ไข: ' + emp.display_name;
     document.getElementById('empId').value = emp.employee_id;
+    document.getElementById('empLineUserId').value = emp.line_user_id || '';
     document.getElementById('empName').value = emp.display_name || '';
     document.getElementById('empPhone').value = emp.phone || '';
     document.getElementById('empDept').value = emp.department || '';
@@ -232,19 +294,17 @@
     document.getElementById('empBasePay').value = emp.base_pay_monthly || 0;
     document.getElementById('empOtRate').value = emp.ot_rate_per_hour || 0;
 
-    // Populate approver selects
-    ['1','2','3'].forEach(function(level) {
-      const sel = document.getElementById('empApprover' + level);
-      sel.innerHTML = '<option value="">-- ไม่มี --</option>';
-      employeesCache.filter(function(e) { return e.employee_id !== emp.employee_id; })
-        .forEach(function(e) {
-          const opt = document.createElement('option');
-          opt.value = e.employee_id;
-          opt.textContent = e.display_name + ' (' + e.employee_id + ')';
-          if (emp['approver_L' + level + '_id'] === e.employee_id) opt.selected = true;
-          sel.appendChild(opt);
-        });
-    });
+    const sel = document.getElementById('empApprover1');
+    sel.innerHTML = '<option value="">-- ไม่มี --</option>';
+    employeesCache.filter(function(e) { return e.employee_id !== emp.employee_id; })
+      .forEach(function(e) {
+        const opt = document.createElement('option');
+        opt.value = e.employee_id;
+        opt.textContent = e.display_name + ' (' + e.employee_id + ')';
+        if (emp.approver_L1_id === e.employee_id) opt.selected = true;
+        sel.appendChild(opt);
+      });
+    document.getElementById('empRole').value = emp.role || 'employee';
     document.getElementById('empActive').value = emp.is_active ? 'true' : 'false';
     document.getElementById('empModal').classList.add('show');
   }
@@ -252,6 +312,7 @@
   document.getElementById('btnSaveEmp').onclick = async function() {
     const empId = document.getElementById('empId').value;
     const updates = {
+      line_user_id: document.getElementById('empLineUserId').value.trim(),
       display_name: document.getElementById('empName').value,
       phone: document.getElementById('empPhone').value,
       department: document.getElementById('empDept').value,
@@ -259,15 +320,14 @@
       base_pay_monthly: Number(document.getElementById('empBasePay').value || 0),
       ot_rate_per_hour: Number(document.getElementById('empOtRate').value || 0),
       approver_L1_id: document.getElementById('empApprover1').value,
-      approver_L2_id: document.getElementById('empApprover2').value,
-      approver_L3_id: document.getElementById('empApprover3').value,
+      role: document.getElementById('empRole').value,
       is_active: document.getElementById('empActive').value === 'true'
     };
     const r = await api('hr_update_emp', { employeeId: empId, updates: updates });
     if (r.ok) {
-      alert('บันทึกสำเร็จ');
       document.getElementById('empModal').classList.remove('show');
       loadEmployees();
+      showSuccessPopup('บันทึกสำเร็จ', 'บันทึกข้อมูลพนักงานเรียบร้อย');
     } else {
       alert('Error: ' + r.error);
     }
@@ -283,9 +343,9 @@
       employee: { line_user_id: lineUserId.trim(), display_name: displayName.trim(), phone: phone.trim() }
     });
     if (r.ok) {
-      alert('เพิ่มพนักงานสำเร็จ รหัส ' + r.employeeId);
       loadEmployees();
       loadQuotas();
+      showSuccessPopup('เพิ่มพนักงานสำเร็จ', 'รหัสพนักงาน ' + r.employeeId);
     } else {
       alert('เพิ่มพนักงานไม่สำเร็จ: ' + r.error);
     }
@@ -327,7 +387,7 @@
         reason: reason
       }
     });
-    if (r.ok) { alert('เพิ่มแล้ว'); loadPayItems(); }
+    if (r.ok) { loadPayItems(); showSuccessPopup('เพิ่มรายการสำเร็จ', 'เพิ่มรายการเพิ่ม/หักเรียบร้อย'); }
     else alert('Error');
   };
 
@@ -372,7 +432,7 @@
       year: year,
       updates: { sick_quota: Number(sick), personal_quota: Number(personal), vacation_quota: Number(vacation) }
     });
-    if (r.ok) { alert('บันทึกโควตาแล้ว'); loadQuotas(); }
+    if (r.ok) { loadQuotas(); showSuccessPopup('บันทึกสำเร็จ', 'บันทึกโควตาลาเรียบร้อย'); }
     else alert('บันทึกไม่สำเร็จ: ' + r.error);
   }
 
@@ -398,7 +458,7 @@
     if (!name) return;
     const type = prompt('ประเภท (public/company):', 'public') || 'company';
     const r = await api('hr_add_holiday', { holiday: { date: date.trim(), name: name.trim(), type: type.trim() } });
-    if (r.ok) { alert('เพิ่มวันหยุดแล้ว'); loadHolidays(); }
+    if (r.ok) { loadHolidays(); showSuccessPopup('เพิ่มวันหยุดสำเร็จ', 'เพิ่มวันหยุดเรียบร้อย'); }
     else alert('เพิ่มวันหยุดไม่สำเร็จ: ' + r.error);
   };
 
@@ -426,17 +486,30 @@
     if (!confirm('ยืนยันการปิดงวด ' + period + ' ?\n\nระบบจะคำนวณยอดและสร้าง Payment records')) return;
     const r = await api('close_period', { period: period });
     if (r.ok) {
-      alert('ปิดงวดเรียบร้อย\n' + r.count + ' รายการ\nรวม ' + Number(r.totalSum).toLocaleString() + ' บาท');
+      showSuccessPopup(
+        'ปิดงวดสำเร็จ',
+        'สร้างรายการ ' + r.count + ' รายการ รวม ' + Number(r.totalSum).toLocaleString() + ' บาท'
+      );
     } else if (r.error === 'has_pending') {
       if (confirm('มีคำขอค้าง: ' + r.pendingLeaves + ' ลา + ' + r.pendingOT + ' OT\n\nต้องการปิดงวดต่อ?')) {
         const r2 = await api('close_period', { period: period, force: true });
-        if (r2.ok) alert('ปิดงวดเรียบร้อย (force)');
+        if (r2.ok) showSuccessPopup('ปิดงวดสำเร็จ', 'ปิดงวดเรียบร้อยแบบบังคับปิด');
         else alert('Error: ' + r2.error);
       }
     } else {
       alert('Error: ' + r.error);
     }
   };
+
+  function showSuccessPopup(title, message) {
+    document.getElementById('successPopupTitle').textContent = title || 'บันทึกสำเร็จ';
+    document.getElementById('successPopupMessage').textContent = message || 'ดำเนินการเรียบร้อย';
+    document.getElementById('successPopup').classList.add('show');
+  }
+
+  function hideSuccessPopup() {
+    document.getElementById('successPopup').classList.remove('show');
+  }
 
 </script>
 </body>

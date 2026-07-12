@@ -53,6 +53,7 @@ function getBalance(payload) {
 
   // === Last paid period ===
   const lastPayment = findLastPayment(emp.employee_id);
+  const leaveHistory = getEmployeeLeaveHistoryRows(emp.employee_id, 20, period);
 
   // === Pending counts ===
   const pendingLeaves = filterRows(SHEETS.LEAVES.name, function(r) {
@@ -82,6 +83,7 @@ function getBalance(payload) {
     deduction: deduction,
     estimateTotal: Math.round(estimateTotal),
     leaveBalance: leaveBalance,
+    leaveHistory: leaveHistory,
     pending: { leaves: pendingLeaves, ot: pendingOT },
     lastPayment: lastPayment ? {
       period: lastPayment.period,
@@ -89,6 +91,258 @@ function getBalance(payload) {
       status: lastPayment.status
     } : null
   };
+}
+
+function getEmployeeLeaveHistory(payload) {
+  const lineUserId = payload.lineUserId;
+  const emp = findEmployeeByLineId(lineUserId);
+  if (!emp) return { ok: false, error: 'not_registered' };
+
+  return {
+    ok: true,
+    employee: {
+      id: emp.employee_id,
+      name: emp.display_name
+    },
+    period: payload.period || '',
+    leaves: getEmployeeLeaveHistoryRows(emp.employee_id, Number(payload.limit || 50), payload.period || '')
+  };
+}
+
+function getEmployeeLeaveHistoryRows(employeeId, limit, period) {
+  limit = Math.max(1, Math.min(Number(limit || 20), 100));
+  const normalizedPeriod = normalizePeriodString(period);
+
+  const rows = filterRows(SHEETS.LEAVES.name, function(r) {
+    return r.employee_id === employeeId
+      && (!normalizedPeriod || leaveRowMatchesPeriod(r, normalizedPeriod));
+  });
+
+  rows.sort(function(a, b) {
+    return String(b.submitted_at || b.start_date || '').localeCompare(String(a.submitted_at || a.start_date || ''));
+  });
+
+  return rows.slice(0, limit).map(function(r) {
+    return {
+      leave_id: r.leave_id,
+      leave_type: r.leave_type,
+      duration_type: r.duration_type,
+      start_date: sheetDateString(r.start_date),
+      end_date: sheetDateString(r.end_date),
+      start_time: r.start_time || '',
+      end_time: r.end_time || '',
+      total_days: Number(r.total_days || 0),
+      total_hours: r.total_hours || '',
+      reason: r.reason || '',
+      status: r.status || '',
+      can_cancel: String(r.status).indexOf('pending') === 0,
+      submitted_at: sheetDateTimeString(r.submitted_at)
+    };
+  });
+}
+
+function normalizePeriodString(period) {
+  if (!period) return '';
+  const raw = String(period).trim();
+  const match = raw.match(/^(\d{4})-(\d{1,2})/);
+  if (!match) return '';
+  return match[1] + '-' + ('0' + match[2]).slice(-2);
+}
+
+function leaveRowMatchesPeriod(row, period) {
+  const monthStart = period + '-01';
+  const monthEnd = periodMonthEndString(period);
+  const start = sheetDateString(row.start_date);
+  const end = sheetDateString(row.end_date) || start;
+  if (!start) return false;
+  return start <= monthEnd && end >= monthStart;
+}
+
+function periodMonthEndString(period) {
+  const parts = period.split('-');
+  const year = Number(parts[0]);
+  const month = Number(parts[1]);
+  return formatDate(new Date(year, month, 0));
+}
+
+function getEmployeeProfile(payload) {
+  const lineUserId = payload.lineUserId;
+  if (!lineUserId) return { ok: false, error: 'missing_line_user_id' };
+
+  const emp = findEmployeeByLineId(lineUserId);
+  if (!emp) return { ok: false, error: 'not_registered' };
+
+  const approver = emp.approver_L1_id ? findEmployeeById(emp.approver_L1_id) : null;
+  const context = getUserContext(payload);
+  const config = getConfig();
+
+  return {
+    ok: true,
+    employee: {
+      id: emp.employee_id,
+      name: emp.display_name,
+      phone: emp.phone || '',
+      email: emp.email || '',
+      department: emp.department || '',
+      position: emp.position || '',
+      bankName: emp.bank_name || '',
+      bankAccountNo: emp.bank_account_no || '',
+      bankAccountName: emp.bank_account_name || '',
+      role: normalizeRole(emp.role),
+      startDate: sheetDateString(emp.start_date),
+      isActive: emp.is_active === true || emp.is_active === 'TRUE' || emp.is_active === 'true',
+      registeredAt: sheetDateTimeString(emp.registered_at)
+    },
+    line: {
+      linked: Boolean(emp.line_user_id),
+      userIdTail: emp.line_user_id ? String(emp.line_user_id).slice(-6) : ''
+    },
+    approver: approver ? {
+      id: approver.employee_id,
+      name: approver.display_name,
+      department: approver.department || '',
+      position: approver.position || ''
+    } : {
+      id: emp.approver_L1_id || '',
+      name: ''
+    },
+    roles: context.roles || [],
+    permissions: Object.assign({}, context.permissions || {}, {
+      canEditProfile: true,
+      canEditBank: config.allow_employee_bank_edit !== false
+    })
+  };
+}
+
+function updateEmployeeProfile(payload) {
+  const lineUserId = payload.lineUserId;
+  if (!lineUserId) return { ok: false, error: 'missing_line_user_id' };
+
+  const emp = findEmployeeByLineId(lineUserId);
+  if (!emp) return { ok: false, error: 'not_registered' };
+
+  const config = getConfig();
+  const bankEditAllowed = config.allow_employee_bank_edit !== false;
+  const hasBankUpdates = payload.bankName !== undefined
+    || payload.bankAccountNo !== undefined
+    || payload.bankAccountName !== undefined;
+  if (!bankEditAllowed && hasBankUpdates) {
+    return { ok: false, error: 'bank_edit_disabled', message: 'บริษัทไม่ได้เปิดให้พนักงานแก้ไขบัญชีธนาคารเอง' };
+  }
+
+  const updates = {};
+  if (payload.phone !== undefined) updates.phone = cleanProfileText(payload.phone, 30);
+  if (payload.email !== undefined) updates.email = cleanProfileText(payload.email, 120);
+  if (payload.bankName !== undefined) updates.bank_name = cleanProfileText(payload.bankName, 80);
+  if (payload.bankAccountNo !== undefined) updates.bank_account_no = cleanProfileText(payload.bankAccountNo, 60);
+  if (payload.bankAccountName !== undefined) updates.bank_account_name = cleanProfileText(payload.bankAccountName, 120);
+
+  if (updates.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(updates.email)) {
+    return { ok: false, error: 'invalid_email', message: 'รูปแบบอีเมลไม่ถูกต้อง' };
+  }
+  if (updates.phone && !/^[0-9+\-\s()]{8,30}$/.test(updates.phone)) {
+    return { ok: false, error: 'invalid_phone', message: 'รูปแบบเบอร์โทรไม่ถูกต้อง' };
+  }
+
+  const ok = updateRow(SHEETS.EMPLOYEES.name, function(r) {
+    return r.employee_id === emp.employee_id && r.line_user_id === lineUserId;
+  }, updates);
+  if (!ok) return { ok: false, error: 'employee_not_found' };
+
+  logUserAction('employee_profile_update', lineUserId, 'success', {
+    employeeId: emp.employee_id,
+    fields: Object.keys(updates)
+  });
+
+  return { ok: true, employee: Object.assign({}, emp, updates) };
+}
+
+function cleanProfileText(value, maxLength) {
+  value = String(value === null || value === undefined ? '' : value).trim();
+  if (value.length > maxLength) value = value.substring(0, maxLength);
+  return value;
+}
+
+function sheetDateString(value) {
+  if (!value) return '';
+  if (value instanceof Date) return formatDate(value);
+  return String(value).substring(0, 10);
+}
+
+function sheetDateTimeString(value) {
+  if (!value) return '';
+  if (value instanceof Date) return formatDateTime(value);
+  return String(value).replace('T', ' ').substring(0, 19);
+}
+
+function getUserContext(payload) {
+  const lineUserId = payload.lineUserId;
+  if (!lineUserId) return { ok: false, error: 'missing_line_user_id' };
+
+  const emp = findEmployeeByLineId(lineUserId);
+  const owner = isOwner(lineUserId);
+  const hrAdmin = isHrAdmin(lineUserId);
+  const employeeId = emp ? emp.employee_id : '';
+  const assignedApprover = emp ? isAssignedApprover(employeeId) : false;
+  const pendingApprovals = emp ? countPendingApprovalsFor(employeeId) : 0;
+  const approver = assignedApprover || pendingApprovals > 0;
+  const baseRole = normalizeRole(emp && emp.role);
+
+  const roles = [];
+  if (emp) roles.push('employee');
+  if (baseRole && baseRole !== 'employee' && roles.indexOf(baseRole) < 0) roles.push(baseRole);
+  if (approver && roles.indexOf('approver') < 0) roles.push('approver');
+  if (owner && roles.indexOf('owner') < 0) roles.push('owner');
+
+  return {
+    ok: true,
+    registered: Boolean(emp),
+    employee: emp ? {
+      id: emp.employee_id,
+      name: emp.display_name,
+      department: emp.department,
+      position: emp.position
+    } : null,
+    roles: roles,
+    permissions: {
+      employee: Boolean(emp),
+      approver: approver,
+      admin: hrAdmin
+    },
+    pendingApprovals: pendingApprovals
+  };
+}
+
+function isAssignedApprover(employeeId) {
+  if (!employeeId) return false;
+  return getAllRows(SHEETS.EMPLOYEES.name).some(function(r) {
+    return r.approver_L1_id === employeeId;
+  });
+}
+
+function normalizeRole(role) {
+  role = String(role || 'employee').trim().toLowerCase();
+  if (['employee', 'approver', 'hr', 'admin'].indexOf(role) < 0) return 'employee';
+  return role;
+}
+
+function isHrAdmin(lineUserId) {
+  const emp = findEmployeeByLineId(lineUserId);
+  const role = normalizeRole(emp && emp.role);
+  return role === 'hr' || role === 'admin';
+}
+
+function countPendingApprovalsFor(employeeId) {
+  if (!employeeId) return 0;
+  const pendingLeaves = filterRows(SHEETS.LEAVES.name, function(r) {
+    return r.current_approver === employeeId
+      && String(r.status).indexOf('pending_') === 0;
+  }).length;
+  const pendingOT = filterRows(SHEETS.OT.name, function(r) {
+    return r.current_approver === employeeId
+      && String(r.status).indexOf('pending_') === 0;
+  }).length;
+  return pendingLeaves + pendingOT;
 }
 
 function currentPeriod() {
@@ -223,13 +477,13 @@ function submitEvidence(payload) {
  * ============================================================
  */
 function hrGetEmployees(payload) {
-  if (!isOwner(payload.lineUserId)) return { ok: false, error: 'forbidden' };
+  if (!isHrAdmin(payload.lineUserId)) return { ok: false, error: 'forbidden' };
   const employees = getAllRows(SHEETS.EMPLOYEES.name);
   return { ok: true, employees: employees };
 }
 
 function hrAddEmployee(payload) {
-  if (!isOwner(payload.lineUserId)) return { ok: false, error: 'forbidden' };
+  if (!isHrAdmin(payload.lineUserId)) return { ok: false, error: 'forbidden' };
   const newEmp = payload.employee || {};
   newEmp.line_user_id = String(newEmp.line_user_id || '').trim();
   newEmp.display_name = String(newEmp.display_name || '').trim();
@@ -246,6 +500,7 @@ function hrAddEmployee(payload) {
 
   newEmp.base_pay_monthly = Math.max(0, Number(newEmp.base_pay_monthly || 0));
   newEmp.ot_rate_per_hour = Math.max(0, Number(newEmp.ot_rate_per_hour || 0));
+  newEmp.role = normalizeRole(newEmp.role);
   newEmp.start_date = newEmp.start_date || todayBangkok();
   newEmp.registered_at = nowBangkok();
   newEmp.is_active = true;
@@ -255,15 +510,16 @@ function hrAddEmployee(payload) {
 }
 
 function hrUpdateEmployee(payload) {
-  if (!isOwner(payload.lineUserId)) return { ok: false, error: 'forbidden' };
+  if (!isHrAdmin(payload.lineUserId)) return { ok: false, error: 'forbidden' };
   const employeeId = payload.employeeId;
-  if (!employeeId || !findEmployeeById(employeeId)) return { ok: false, error: 'employee_not_found' };
+  const existingEmployee = employeeId ? findEmployeeById(employeeId) : null;
+  if (!employeeId || !existingEmployee) return { ok: false, error: 'employee_not_found' };
 
   const allowed = [
-    'display_name', 'phone', 'email', 'department', 'position',
+    'line_user_id', 'display_name', 'phone', 'email', 'department', 'position',
     'base_pay_monthly', 'ot_rate_per_hour', 'bank_name',
     'bank_account_no', 'bank_account_name', 'approver_L1_id',
-    'approver_L2_id', 'approver_L3_id', 'start_date', 'is_active'
+    'role', 'start_date', 'is_active'
   ];
   const updates = {};
   const requested = payload.updates || {};
@@ -273,9 +529,18 @@ function hrUpdateEmployee(payload) {
   if (updates.display_name !== undefined && !String(updates.display_name).trim()) {
     return { ok: false, error: 'missing_display_name' };
   }
+  if (updates.line_user_id !== undefined) {
+    updates.line_user_id = String(updates.line_user_id || '').trim();
+    if (!updates.line_user_id) return { ok: false, error: 'missing_line_user_id' };
+    const lineOwner = findEmployeeByLineId(updates.line_user_id);
+    if (lineOwner && lineOwner.employee_id !== employeeId) {
+      return { ok: false, error: 'line_user_id_exists', message: 'LINE User ID นี้ถูกผูกกับพนักงานคนอื่นแล้ว' };
+    }
+  }
   ['base_pay_monthly', 'ot_rate_per_hour'].forEach(function(key) {
     if (updates[key] !== undefined) updates[key] = Math.max(0, Number(updates[key] || 0));
   });
+  if (updates.role !== undefined) updates.role = normalizeRole(updates.role);
 
   const ok = updateRow(SHEETS.EMPLOYEES.name, function(r) {
     return r.employee_id === employeeId;
@@ -284,7 +549,7 @@ function hrUpdateEmployee(payload) {
 }
 
 function hrGetPayItems(payload) {
-  if (!isOwner(payload.lineUserId)) return { ok: false, error: 'forbidden' };
+  if (!isHrAdmin(payload.lineUserId)) return { ok: false, error: 'forbidden' };
   const period = payload.period || currentPeriod();
   const items = filterRows(SHEETS.PAY_ITEMS.name, function(r) {
     return r.period === period;
@@ -293,7 +558,7 @@ function hrGetPayItems(payload) {
 }
 
 function hrAddPayItem(payload) {
-  if (!isOwner(payload.lineUserId)) return { ok: false, error: 'forbidden' };
+  if (!isHrAdmin(payload.lineUserId)) return { ok: false, error: 'forbidden' };
   const item = payload.item || {};
   if (!/^\d{4}-\d{2}$/.test(String(item.period || ''))) return { ok: false, error: 'invalid_period' };
   if (['bonus', 'deduction'].indexOf(item.type) < 0) return { ok: false, error: 'invalid_type' };
@@ -310,7 +575,7 @@ function hrAddPayItem(payload) {
 }
 
 function hrGetHolidays(payload) {
-  if (!isOwner(payload.lineUserId)) return { ok: false, error: 'forbidden' };
+  if (!isHrAdmin(payload.lineUserId)) return { ok: false, error: 'forbidden' };
   const holidays = getAllRows(SHEETS.HOLIDAYS.name).map(function(h) {
     return {
       date: h.date ? formatDate(new Date(h.date)) : '',
@@ -323,7 +588,7 @@ function hrGetHolidays(payload) {
 }
 
 function hrAddHoliday(payload) {
-  if (!isOwner(payload.lineUserId)) return { ok: false, error: 'forbidden' };
+  if (!isHrAdmin(payload.lineUserId)) return { ok: false, error: 'forbidden' };
   const holiday = payload.holiday || {};
   const date = String(holiday.date || '');
   const name = String(holiday.name || '').trim();
@@ -346,7 +611,7 @@ function hrAddHoliday(payload) {
 }
 
 function hrGetLeaveQuotas(payload) {
-  if (!isOwner(payload.lineUserId)) return { ok: false, error: 'forbidden' };
+  if (!isHrAdmin(payload.lineUserId)) return { ok: false, error: 'forbidden' };
   const year = Number(payload.year || new Date().getFullYear());
   if (!Number.isInteger(year) || year < 2000 || year > 2200) {
     return { ok: false, error: 'invalid_year' };
@@ -369,7 +634,7 @@ function hrGetLeaveQuotas(payload) {
 }
 
 function hrSetLeaveQuota(payload) {
-  if (!isOwner(payload.lineUserId)) return { ok: false, error: 'forbidden' };
+  if (!isHrAdmin(payload.lineUserId)) return { ok: false, error: 'forbidden' };
   const employeeId = payload.employeeId;
   const year = Number(payload.year);
   if (!findEmployeeById(employeeId)) return { ok: false, error: 'employee_not_found' };
@@ -393,7 +658,7 @@ function hrSetLeaveQuota(payload) {
 }
 
 function hrGetReport(payload) {
-  if (!isOwner(payload.lineUserId)) return { ok: false, error: 'forbidden' };
+  if (!isHrAdmin(payload.lineUserId)) return { ok: false, error: 'forbidden' };
   const period = payload.period || currentPeriod();
   const employees = getActiveEmployees();
   const report = employees.map(function(emp) {
@@ -421,7 +686,7 @@ function isOwner(lineUserId) {
  * ============================================================
  */
 function closePeriod(payload) {
-  if (!isOwner(payload.lineUserId)) return { ok: false, error: 'forbidden' };
+  if (!isHrAdmin(payload.lineUserId)) return { ok: false, error: 'forbidden' };
   const period = payload.period || currentPeriod();
 
   // Check pending
@@ -515,7 +780,7 @@ function closePeriod(payload) {
 }
 
 function markPaid(payload) {
-  if (!isOwner(payload.lineUserId)) return { ok: false, error: 'forbidden' };
+  if (!isHrAdmin(payload.lineUserId)) return { ok: false, error: 'forbidden' };
   const paymentId = payload.paymentId;
 
   const ok = updateRow(SHEETS.PAYMENTS.name, function(r) {
@@ -542,3 +807,4 @@ function markPaid(payload) {
 
   return { ok: ok };
 }
+

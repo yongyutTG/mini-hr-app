@@ -9,11 +9,32 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: 'Noto Sans Thai', system-ui, sans-serif; background: #FFF8F0; padding: 16px; }
   .header {
-    background: linear-gradient(135deg, #06A65A, #06C755); color: #fff;
+    background: linear-gradient(135deg, #D4550A, #F28C28); color: #fff;
     padding: 20px; border-radius: 16px; margin-bottom: 16px;
   }
   .header h1 { font-size: 22px; }
-
+  .page-title, .icon-label, .type-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  .page-title, .icon-label { justify-content: flex-start; }
+  .material-symbols-rounded {
+    font-family: 'Material Symbols Rounded';
+    font-weight: 500;
+    font-style: normal;
+    font-size: 22px;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    display: inline-block;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+  }
   .quota-box {
     background: #fff; padding: 16px; border-radius: 12px; margin-bottom: 12px;
     display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: center;
@@ -35,6 +56,8 @@
   .field input, .field textarea, .field select {
     width: 100%; border: 1px solid #DDD; padding: 10px; border-radius: 6px; font-family: inherit; font-size: 14px;
   }
+  .time-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .hint { font-size: 12px; color: #777; margin-top: 8px; }
   .btn-submit {
     background: #D4550A; color: #fff; border: none; padding: 16px;
     border-radius: 12px; font-size: 17px; font-weight: 700; width: 100%; margin-top: 8px;
@@ -45,11 +68,33 @@
   #status.success { background: #1F7A1F; color: #fff; }
   #status.error { background: #B23A3A; color: #fff; }
   #status.loading { background: #F2A640; color: #fff; }
+  .popup-backdrop {
+    position: fixed; inset: 0; z-index: 10000; display: none;
+    align-items: center; justify-content: center; padding: 18px;
+    background: rgba(0, 0, 0, 0.42);
+  }
+  .popup-backdrop.show { display: flex; }
+  .popup {
+    width: 100%; max-width: 340px; background: #fff; border-radius: 18px;
+    padding: 22px; text-align: center; box-shadow: 0 18px 50px rgba(0, 0, 0, 0.22);
+  }
+  .popup-icon {
+    width: 54px; height: 54px; margin: 0 auto 10px; border-radius: 50%;
+    display: grid; place-items: center; background: #E9F8E9; color: #1F7A1F;
+  }
+  .popup-icon .material-symbols-rounded { font-size: 32px; }
+  .popup-title { font-size: 18px; font-weight: 900; margin-bottom: 6px; }
+  .popup-message { color: #666; font-size: 13px; line-height: 1.6; margin-bottom: 16px; }
+  .popup-ok {
+    width: 100%; background: #D4550A; color: #fff; border: none;
+    border-radius: 10px; padding: 12px 14px; font-family: inherit;
+    font-size: 14px; font-weight: 800;
+  }
 </style>
 </head>
 <body>
 <div class="header">
-  <h1>📝 ส่งใบลา</h1>
+  <h1 class="page-title"><span class="material-symbols-rounded">event_busy</span>ส่งใบลา</h1>
   <p>กรอกฟอร์มเพื่อขออนุมัติ</p>
 </div>
 
@@ -96,16 +141,32 @@
 
 <div class="field"><label>วันที่เริ่มลา *</label><input type="date" id="startDate"></div>
 <div class="field"><label>วันที่สิ้นสุด</label><input type="date" id="endDate"></div>
-<div class="field" id="hoursField" style="display:none;"><label>จำนวนชั่วโมง</label><input type="number" id="totalHours" min="0.5" step="0.5"></div>
+<div class="field" id="timeField" style="display:none;">
+  <label class="icon-label"><span class="material-symbols-rounded">schedule</span>เวลาที่ขอลา *</label>
+  <div class="time-grid">
+    <input type="time" id="startTime" aria-label="เวลาเริ่มลา">
+    <input type="time" id="endTime" aria-label="เวลาสิ้นสุดลา">
+  </div>
+  <div class="hint" id="hoursHint">ระบุเวลาเพื่อให้ระบบคำนวณชั่วโมงให้อัตโนมัติ</div>
+</div>
 
 <div class="field"><label>เหตุผล *</label><textarea id="reason" rows="3" placeholder="ระบุเหตุผลโดยย่อ"></textarea></div>
 
 <button class="btn-submit" id="btnSubmit" disabled>ส่งใบลา</button>
 <div id="status"></div>
 
+<div class="popup-backdrop" id="resultPopup" role="dialog" aria-modal="true" aria-labelledby="resultPopupTitle">
+  <div class="popup">
+    <div class="popup-icon"><span class="material-symbols-rounded" aria-hidden="true">check_circle</span></div>
+    <div class="popup-title" id="resultPopupTitle">ส่งใบลาสำเร็จ</div>
+    <div class="popup-message" id="resultPopupMessage">ส่งใบลาเรียบร้อย</div>
+    <button class="popup-ok" id="resultPopupOk" type="button">ตกลง</button>
+  </div>
+</div>
+
 <script>
-  const LIFF_ID = '{{LIFF_ID}}';
-  const APPS_SCRIPT_URL = '{{SCRIPT_URL}}';
+  const LIFF_ID = '<?= LIFF_ID ?>';
+  const APPS_SCRIPT_URL = '<?= SCRIPT_URL ?>';
   let userId = null;
   let leaveType = null;
   let durationType = null;
@@ -144,7 +205,7 @@
     b.onclick = function() {
       document.querySelectorAll('.type-btn[data-dur]').forEach(function(x) { x.classList.remove('active'); });
       b.classList.add('active'); durationType = b.dataset.dur;
-      document.getElementById('hoursField').style.display = durationType === 'hourly' ? 'block' : 'none';
+      document.getElementById('timeField').style.display = durationType === 'hourly' ? 'block' : 'none';
       checkCan();
     };
   });
@@ -152,9 +213,33 @@
 
   function checkCan() {
     const startDate = document.getElementById('startDate').value;
+    const startTime = document.getElementById('startTime').value;
+    const endTime = document.getElementById('endTime').value;
     const reason = document.getElementById('reason').value.trim();
+    const hasTime = durationType !== 'hourly' || (startTime && endTime && toMinutes(endTime) > toMinutes(startTime));
+    updateHoursHint();
     document.getElementById('btnSubmit').disabled =
-      !(leaveType && durationType && startDate && reason);
+      !(leaveType && durationType && startDate && hasTime && reason);
+  }
+
+  function updateHoursHint() {
+    const hint = document.getElementById('hoursHint');
+    const startTime = document.getElementById('startTime').value;
+    const endTime = document.getElementById('endTime').value;
+    if (!hint || !startTime || !endTime) return;
+    const startMin = toMinutes(startTime);
+    const endMin = toMinutes(endTime);
+    if (endMin <= startMin) {
+      hint.textContent = 'เวลาสิ้นสุดต้องหลังเวลาเริ่ม';
+      return;
+    }
+    const hours = ((endMin - startMin) / 60).toFixed(2).replace(/\.00$/, '');
+    hint.textContent = 'รวมประมาณ ' + hours + ' ชั่วโมง';
+  }
+
+  function toMinutes(value) {
+    const p = value.split(':');
+    return Number(p[0]) * 60 + Number(p[1]);
   }
 
   document.getElementById('btnSubmit').onclick = async function() {
@@ -169,7 +254,8 @@
       durationType: durationType,
       startDate: startDate,
       endDate: endDate,
-      totalHours: document.getElementById('totalHours').value || null,
+      startTime: document.getElementById('startTime').value || null,
+      endTime: document.getElementById('endTime').value || null,
       reason: document.getElementById('reason').value
     };
     try {
@@ -179,21 +265,40 @@
       });
       const json = await res.json();
       if (json.ok) {
-        showStatus('✅ ส่งใบลาเรียบร้อย ' + json.leaveId, 'success');
-        setTimeout(function() { liff.closeWindow(); }, 2500);
+        clearStatus();
+        showResultPopup('ส่งใบลาสำเร็จ', 'ส่งใบลาเรียบร้อย ' + json.leaveId);
       } else {
-        showStatus('❌ ' + (json.message || json.error), 'error');
+        showStatus(json.message || json.error, 'error');
         document.getElementById('btnSubmit').disabled = false;
       }
     } catch (err) {
-      showStatus('❌ ' + err.message, 'error');
+      showStatus(err.message, 'error');
       document.getElementById('btnSubmit').disabled = false;
     }
+  };
+  document.getElementById('resultPopupOk').onclick = function() {
+    hideResultPopup();
   };
 
   function showStatus(t, l) {
     const el = document.getElementById('status');
     el.textContent = t; el.className = 'show ' + l;
+  }
+
+  function clearStatus() {
+    const el = document.getElementById('status');
+    el.textContent = '';
+    el.className = '';
+  }
+
+  function showResultPopup(title, message) {
+    document.getElementById('resultPopupTitle').textContent = title;
+    document.getElementById('resultPopupMessage').textContent = message;
+    document.getElementById('resultPopup').classList.add('show');
+  }
+
+  function hideResultPopup() {
+    document.getElementById('resultPopup').classList.remove('show');
   }
 </script>
 </body>

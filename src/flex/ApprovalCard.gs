@@ -18,6 +18,7 @@ function buildLeaveApprovalCard(opts) {
   const leave = opts.leave;
   const employee = opts.employee;
   const level = opts.level || 'L1';
+  const leaveTime = leave.start_time && leave.end_time ? leave.start_time + ' - ' + leave.end_time : '';
 
   return {
     type: 'bubble',
@@ -49,8 +50,9 @@ function buildLeaveApprovalCard(opts) {
         kvRow('ตำแหน่ง', (employee.department || '') + ' · ' + (employee.position || '')),
         { type: 'separator', margin: 'md' },
         kvRow('ประเภท', thaiLeaveType(leave.leave_type)),
-        kvRow('ระยะเวลา', thaiDuration(leave.duration_type, leave.total_days)),
+        kvRow('ระยะเวลา', thaiDuration(leave.duration_type, leave.total_days, leave.total_hours)),
         kvRow('วันที่', leave.start_date + (leave.start_date !== leave.end_date ? ' ถึง ' + leave.end_date : '')),
+        leaveTime ? kvRow('เวลา', leaveTime) : { type: 'filler' },
         kvRow('จำนวน', leave.total_days + ' วัน'),
         { type: 'separator', margin: 'md' },
         { type: 'text', text: 'เหตุผล:', color: COLOR_GRAY, size: 'xs', margin: 'md' },
@@ -190,10 +192,10 @@ function needInfoButton(action, id, level, type) {
   };
 }
 
-function thaiDuration(durationType, totalDays) {
+function thaiDuration(durationType, totalDays, totalHours) {
   if (durationType === 'full_day') return 'เต็มวัน (' + totalDays + ')';
   if (durationType === 'half_day_morning') return 'ครึ่งวันเช้า';
   if (durationType === 'half_day_afternoon') return 'ครึ่งวันบ่าย';
-  if (durationType === 'hourly') return 'รายชั่วโมง';
+  if (durationType === 'hourly') return 'รายชั่วโมง' + (totalHours ? ' (' + totalHours + ' ชม.)' : '');
   return durationType;
 }

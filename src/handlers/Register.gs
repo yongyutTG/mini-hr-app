@@ -73,6 +73,7 @@ function register(payload) {
     approver_L1_id: '',  // ต้อง assign ทีหลังโดย HR
     approver_L2_id: '',
     approver_L3_id: '',
+    role: 'employee',
     start_date: todayBangkok(),
     is_active: true,
     registered_at: nowBangkok()
@@ -102,7 +103,7 @@ function register(payload) {
   }]);
 
   // === Notify owner ===
-  pushMessage(getProp('OWNER_LINE_USER_ID'), [{
+  pushMessage(getPropOptional('OWNER_LINE_USER_ID', ''), [{
     type: 'text',
     text: '🆕 พนักงานใหม่ลงทะเบียน\n' +
           'ID: ' + employeeId + '\n' +

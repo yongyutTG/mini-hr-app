@@ -66,7 +66,7 @@ function doGet(e) {
   const page = (e.parameter && e.parameter.page) || 'home';
   const allowedPages = [
     'register', 'checkin', 'leave', 'ot', 'balance',
-    'hr-tools', 'approval-inbox', 'evidence', 'response', 'home'
+    'hr-tools', 'approval-inbox', 'evidence', 'response', 'home', 'profile'
   ];
 
   if (!allowedPages.includes(page)) {
@@ -91,6 +91,9 @@ function doGet(e) {
 
 function getLiffIdForPage(page) {
   const props = PropertiesService.getScriptProperties();
+  if (page === 'profile') {
+    return props.getProperty('LIFF_ID_HOME') || '2010398855-7gTYrfCa';
+  }
   const map = {
     'register': 'LIFF_ID_REGISTER',
     'checkin': 'LIFF_ID_CHECKIN',

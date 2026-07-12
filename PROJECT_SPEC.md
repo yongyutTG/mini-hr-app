@@ -1084,18 +1084,3 @@ Utilities.formatDate(new Date(), 'Asia/Bangkok', "yyyy-MM-dd'T'HH:mm:ssXXX")
 | Moodata Project (Mini HR App package) | **30,000 บาท** (one-time) ติดตั้งสำเร็จรูปจาก template + รับประกัน 3 เดือน |
 | Moodata Project + Knowhow Workshop | **45,000 บาท** (one-time) — สอนทำเป็น mini app อื่นได้ด้วย |
 
----
-
-## 📞 Contact
-
-**คุณปริวรรตน์ อรุโณทยานันท์ (พี่ปุ้ย)**
-Moodata Project — บริษัท ริชมอนด์ กรุ๊ป 89 จำกัด
-
-- 📞 061-797-8899
-- 💬 LINE: w.aruno
-
----
-
-*เอกสารฉบับนี้สำหรับผู้ที่สนใจศึกษาขอบเขตของ Mini HR App
-ถ้าคุณอ่านมาถึงตรงนี้และคิดว่า "เออ น่าทำ" → ลุย
-ถ้าคิดว่า "ยาวจัง" → ทักพี่ปุ้ยให้ติดตั้งให้ก็ได้* 😄

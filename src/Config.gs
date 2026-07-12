@@ -32,6 +32,18 @@ const DEFAULT_CONFIG = {
   geofence_lat: 13.7563,
   geofence_lng: 100.5018,
   geofence_radius_m: 150,
+  branch_1_name: 'สาขากิ่งแก้ว',
+  branch_1_lat: 13.690919359380588,
+  branch_1_lng: 100.7296330533856,
+  branch_1_radius_m: 50,
+  branch_2_name: 'สาขาดอนเมือง',
+  branch_2_lat: 13.934976,
+  branch_2_lng: 100.611001,
+  branch_2_radius_m: 50,
+  branch_3_name: 'สาขาลาดพร้าว',
+  branch_3_lat: 13.805039,
+  branch_3_lng: 100.562180,
+  branch_3_radius_m: 50,
   work_start: '09:00',
   work_end: '18:00',
   lunch_start: '12:00',
@@ -42,8 +54,9 @@ const DEFAULT_CONFIG = {
   vacation_quota_default: 15,
   late_threshold_min: 15,
   ot_request_lead_min: 30,
-  enable_approval_L2: true,
-  enable_approval_L3: true,
+  enable_approval_L2: false,
+  enable_approval_L3: false,
+  allow_employee_bank_edit: true,
 };
 
 /**
@@ -140,7 +153,7 @@ const SHEETS = {
       'bank_name', 'bank_account_no', 'bank_account_name',
       'selfie_url', 'id_card_url',
       'approver_L1_id', 'approver_L2_id', 'approver_L3_id',
-      'start_date', 'is_active', 'registered_at'
+      'role', 'start_date', 'is_active', 'registered_at'
     ]
   },
   CHECKINS: {
@@ -148,14 +161,15 @@ const SHEETS = {
     columns: [
       'checkin_id', 'employee_id', 'checkin_date', 'slot',
       'checkin_at', 'lat', 'lng', 'distance_m', 'selfie_url',
-      'status', 'approved_by', 'approved_at'
+      'status', 'approved_by', 'approved_at', 'branch_name'
     ]
   },
   LEAVES: {
     name: 'Leaves',
     columns: [
       'leave_id', 'employee_id', 'leave_type', 'duration_type',
-      'start_date', 'end_date', 'total_days', 'total_hours', 'reason',
+      'start_date', 'end_date', 'start_time', 'end_time',
+      'total_days', 'total_hours', 'reason',
       'evidence_url', 'status', 'current_approver', 'approval_history',
       'submitted_at'
     ]
@@ -252,6 +266,70 @@ function initializeAllSheets() {
   return { ok: true, sheets: results };
 }
 
+function migrateEmployeeRoleColumn() {
+  const ss = SpreadsheetApp.openById(getProp('SHEET_ID'));
+  const sheet = ss.getSheetByName(SHEETS.EMPLOYEES.name);
+  if (!sheet) return { ok: false, error: 'employees_sheet_missing' };
+
+  const header = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  if (header.indexOf('role') >= 0) return { ok: true, added: false };
+
+  const insertAfter = header.indexOf('approver_L3_id') + 1;
+  const insertColumn = insertAfter > 0 ? insertAfter + 1 : sheet.getLastColumn() + 1;
+  sheet.insertColumnBefore(insertColumn);
+  sheet.getRange(1, insertColumn).setValue('role');
+  sheet.getRange(1, insertColumn).setFontWeight('bold').setBackground('#D4550A').setFontColor('#FFFFFF');
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, insertColumn, lastRow - 1, 1).setValue('employee');
+  }
+
+  return { ok: true, added: true, column: insertColumn };
+}
+
+function migrateLeaveTimeColumns() {
+  const ss = SpreadsheetApp.openById(getProp('SHEET_ID'));
+  const sheet = ss.getSheetByName(SHEETS.LEAVES.name);
+  if (!sheet) return { ok: false, error: 'leaves_sheet_missing' };
+
+  const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  const added = [];
+
+  function addColumnAfter(name, afterName) {
+    const latestHeaders = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+    if (latestHeaders.indexOf(name) >= 0) return;
+    const afterIndex = latestHeaders.indexOf(afterName);
+    const insertColumn = afterIndex >= 0 ? afterIndex + 2 : sheet.getLastColumn() + 1;
+    sheet.insertColumnBefore(insertColumn);
+    sheet.getRange(1, insertColumn).setValue(name);
+    sheet.getRange(1, insertColumn).setFontWeight('bold').setBackground('#D4550A').setFontColor('#FFFFFF');
+    added.push(name);
+  }
+
+  addColumnAfter('start_time', 'end_date');
+  addColumnAfter('end_time', 'start_time');
+
+  return { ok: true, added: added };
+}
+
+function migrateCheckinBranchColumn() {
+  const ss = SpreadsheetApp.openById(getProp('SHEET_ID'));
+  const sheet = ss.getSheetByName(SHEETS.CHECKINS.name);
+  if (!sheet) return { ok: false, error: 'checkins_sheet_missing' };
+
+  const headers = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  if (headers.indexOf('branch_name') >= 0) return { ok: true, added: false };
+
+  const afterIndex = headers.indexOf('approved_at');
+  const insertColumn = afterIndex >= 0 ? afterIndex + 2 : sheet.getLastColumn() + 1;
+  sheet.insertColumnBefore(insertColumn);
+  sheet.getRange(1, insertColumn).setValue('branch_name');
+  sheet.getRange(1, insertColumn).setFontWeight('bold').setBackground('#D4550A').setFontColor('#FFFFFF');
+
+  return { ok: true, added: true, column: insertColumn };
+}
+
 function initializeConfigSheet() {
   const ss = SpreadsheetApp.openById(getProp('SHEET_ID'));
   const sheet = ss.getSheetByName('Config');
@@ -270,4 +348,60 @@ function initializeConfigSheet() {
     const startRow = sheet.getLastRow() + 1;
     sheet.getRange(startRow, 1, rowsToAdd.length, 2).setValues(rowsToAdd);
   }
+}
+
+function setCompanyGeofenceKingKaew() {
+  const values = {
+    company_name: 'สำนักงานสุวรรณภูมิ - กิ่งแก้ว',
+    geofence_lat: 13.690919359380588,
+    geofence_lng: 100.7296330533856,
+    geofence_radius_m: 50
+  };
+
+  updateConfigValues(values);
+  return Object.assign({ ok: true }, values);
+}
+
+function setCompanyBranches() {
+  const values = {
+    branch_1_name: 'สาขากิ่งแก้ว',
+    branch_1_lat: 13.690919359380588,
+    branch_1_lng: 100.7296330533856,
+    branch_1_radius_m: 50,
+    branch_2_name: 'สาขาดอนเมือง',
+    branch_2_lat: 13.934976,
+    branch_2_lng: 100.611001,
+    branch_2_radius_m: 50,
+    branch_3_name: 'สาขาลาดพร้าว',
+    branch_3_lat: 13.805039,
+    branch_3_lng: 100.562180,
+    branch_3_radius_m: 50
+  };
+
+  updateConfigValues(values);
+  return Object.assign({ ok: true }, values);
+}
+
+function updateConfigValues(values) {
+  const ss = SpreadsheetApp.openById(getProp('SHEET_ID'));
+  const sheet = ss.getSheetByName('Config') || ss.insertSheet('Config');
+  const lastRow = sheet.getLastRow();
+
+  if (lastRow === 0) {
+    sheet.getRange(1, 1, 1, 2).setValues([['key', 'value']]);
+  }
+
+  const data = sheet.getDataRange().getValues();
+  const rowByKey = {};
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0]) rowByKey[data[i][0]] = i + 1;
+  }
+
+  Object.keys(values).forEach(function(key) {
+    if (rowByKey[key]) {
+      sheet.getRange(rowByKey[key], 2).setValue(values[key]);
+    } else {
+      sheet.appendRow([key, values[key]]);
+    }
+  });
 }

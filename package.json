@@ -1,0 +1,12 @@
+{
+  "name": "mini-hr-app",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-web.js",
+    "check": "node scripts/check-project.js"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
