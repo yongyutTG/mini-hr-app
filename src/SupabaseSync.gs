@@ -453,6 +453,28 @@ function formatDateTimeValue_(value) {
   return String(value);
 }
 
+function formatTimeValue_(value) {
+  if (!value) return null;
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return Utilities.formatDate(value, Session.getScriptTimeZone(), 'HH:mm:ss');
+  }
+
+  var text = String(value).trim();
+  if (!text) return null;
+
+  // Handles strings produced by Apps Script for spreadsheet time cells.
+  var dateMatch = text.match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b/);
+  if (dateMatch) {
+    return ('0' + dateMatch[1]).slice(-2) + ':' + dateMatch[2] + ':' + (dateMatch[3] || '00');
+  }
+
+  var hmMatch = text.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (hmMatch) {
+    return ('0' + hmMatch[1]).slice(-2) + ':' + hmMatch[2] + ':' + (hmMatch[3] || '00');
+  }
+
+  return null;
+}
 function mapEmployeeSheetRow_(row, rowNumber, sheetName) {
   var employeeCode = getRowValue_(row, [
     'employee_id', 'employee_code', 'emp_id', 'รหัสพนักงาน', 'เลขพนักงาน'
@@ -487,8 +509,8 @@ function mapLeaveSheetRow_(row, rowNumber, sheetName) {
     leave_type: String(getRowValue_(row, ['leave_type', 'type', 'ประเภทการลา']) || ''),
     start_date: formatDateValue_(getRowValue_(row, ['start_date', 'date_from', 'วันที่เริ่ม', 'วันที่ลา'])),
     end_date: formatDateValue_(getRowValue_(row, ['end_date', 'date_to', 'วันที่สิ้นสุด'])),
-    start_time: String(getRowValue_(row, ['start_time', 'เวลาเริ่ม']) || ''),
-    end_time: String(getRowValue_(row, ['end_time', 'เวลาสิ้นสุด']) || ''),
+    start_time: formatTimeValue_(getRowValue_(row, ['start_time', 'เวลาเริ่ม'])),
+    end_time: formatTimeValue_(getRowValue_(row, ['end_time', 'เวลาสิ้นสุด'])),
     duration_type: String(getRowValue_(row, ['duration_type', 'ระยะเวลา']) || ''),
     hours: Number(getRowValue_(row, ['hours', 'ชั่วโมง']) || 0),
     reason: String(getRowValue_(row, ['reason', 'เหตุผล']) || ''),
@@ -512,8 +534,8 @@ function mapOtSheetRow_(row, rowNumber, sheetName) {
     request_id: String(requestId || 'ot-' + sheetName + '-' + rowNumber),
     employee_id: String(employeeCode || ''),
     ot_date: formatDateValue_(getRowValue_(row, ['ot_date', 'date', 'วันที่ทำโอที'])),
-    start_time: String(getRowValue_(row, ['start_time', 'เวลาเริ่ม']) || ''),
-    end_time: String(getRowValue_(row, ['end_time', 'เวลาสิ้นสุด']) || ''),
+    start_time: formatTimeValue_(getRowValue_(row, ['start_time', 'เวลาเริ่ม'])),
+    end_time: formatTimeValue_(getRowValue_(row, ['end_time', 'เวลาสิ้นสุด'])),
     hours: Number(getRowValue_(row, ['hours', 'รวม', 'ชั่วโมง']) || 0),
     reason: String(getRowValue_(row, ['reason', 'เหตุผล']) || ''),
     status: String(getRowValue_(row, ['status', 'สถานะ']) || 'pending'),
@@ -547,4 +569,5 @@ function mapAttendanceSheetRow_(row, rowNumber, sheetName) {
     sheet_row: rowNumber
   };
 }
+
 
