@@ -796,7 +796,29 @@ function switchDataBackendToSheets() {
   PropertiesService.getScriptProperties().setProperty('DATA_BACKEND', 'sheets');
   return { ok: true, DATA_BACKEND: 'sheets' };
 }
+function debugBackendStatus() {
+  var props = PropertiesService.getScriptProperties();
+  var rawBackend = props.getProperty('DATA_BACKEND') || '';
+  var spreadsheet = SpreadsheetApp.openById(getProp('SHEET_ID'));
+  var checkinsSheet = spreadsheet.getSheetByName(SHEETS.CHECKINS.name);
+  var employeesSheet = spreadsheet.getSheetByName(SHEETS.EMPLOYEES.name);
+  var status = {
+    DATA_BACKEND: rawBackend,
+    normalizedBackend: String(rawBackend || 'sheets').toLowerCase(),
+    isSupabasePrimary: isSupabasePrimary_(),
+    scriptUrl: ScriptApp.getService().getUrl(),
+    sheetRows: {
+      Employees: employeesSheet ? Math.max(employeesSheet.getLastRow() - 1, 0) : null,
+      Checkins: checkinsSheet ? Math.max(checkinsSheet.getLastRow() - 1, 0) : null
+    },
+    supabaseRows: testSupabaseStructuredCounts()
+  };
+  Logger.log(JSON.stringify(status, null, 2));
+  return status;
+}
 
-
-
+function forceDataBackendSupabase() {
+  PropertiesService.getScriptProperties().setProperty('DATA_BACKEND', 'supabase');
+  return debugBackendStatus();
+}
 

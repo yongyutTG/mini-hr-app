@@ -93,7 +93,12 @@ function checkin(payload) {
   };
 
   try {
-    migrateCheckinBranchColumn();
+    logInfo('checkin:backend', 'before_insert', {
+      DATA_BACKEND: getPropOptional('DATA_BACKEND', 'sheets'),
+      isSupabasePrimary: isSupabasePrimary_(),
+      checkinId: checkinId
+    });
+    if (!isSupabasePrimary_()) migrateCheckinBranchColumn();
     insertCheckin(newRow);
   } catch (err) {
     logError('checkin:insert', err.message, { lineUserId });
@@ -300,3 +305,5 @@ function hasCheckedOut(employeeId) {
     return c.slot === 'OUT' && c.status === 'approved';
   });
 }
+
+
