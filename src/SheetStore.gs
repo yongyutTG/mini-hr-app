@@ -25,6 +25,7 @@ function clearSheetCache() {
  * Get all rows as array of objects (with header → field map)
  */
 function getAllRows(sheetName) {
+  if (isSupabasePrimary_()) return supabaseGetAppRows_(sheetName);
   const sheet = getSheet(sheetName);
   const data = sheet.getDataRange().getValues();
   if (data.length === 0) return [];
@@ -63,6 +64,7 @@ function filterRows(sheetName, predicate) {
  * Insert a row from object (matching headers)
  */
 function insertRow(sheetName, obj) {
+  if (isSupabasePrimary_()) return supabaseInsertAppRow_(sheetName, obj);
   const sheet = getSheet(sheetName);
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
   const row = headers.map(function(h) { return obj[h] !== undefined ? obj[h] : ''; });
@@ -74,6 +76,7 @@ function insertRow(sheetName, obj) {
  * Update row by row number (1-indexed)
  */
 function updateRowByNumber(sheetName, rowNum, updates) {
+  if (isSupabasePrimary_()) return supabaseUpdateAppRowByNumber_(sheetName, rowNum, updates);
   const sheet = getSheet(sheetName);
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
 
@@ -101,6 +104,7 @@ function updateRow(sheetName, predicate, updates) {
 function deleteRow(sheetName, predicate) {
   const found = findRow(sheetName, predicate);
   if (!found) return false;
+  if (isSupabasePrimary_()) return supabaseDeleteAppRowByNumber_(sheetName, found._row);
   const sheet = getSheet(sheetName);
   sheet.deleteRow(found._row);
   return true;
@@ -201,3 +205,5 @@ function deductLeaveQuota(leave) {
   updates[usedField] = newUsed;
   updateRowByNumber(SHEETS.LEAVE_QUOTA.name, quota._row, updates);
 }
+
+

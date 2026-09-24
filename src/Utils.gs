@@ -60,64 +60,47 @@ function haversineMeters(lat1, lng1, lat2, lng2) {
  * ID generators — atomic via Sheet last row
  */
 function nextEmployeeId() {
-  const sheet = getSheet(SHEETS.EMPLOYEES.name);
-  const lastRow = sheet.getLastRow();
-  // count actual rows excluding header
-  const count = lastRow > 1 ? lastRow - 1 : 0;
-  return 'EMP-' + padLeft(count + 1, 4);
+  const rows = getAllRows(SHEETS.EMPLOYEES.name);
+  return 'EMP-' + padLeft(rows.length + 1, 4);
 }
 
 function nextCheckinId(dateStr) {
-  // dateStr = "2026-05-12"
   const dateCompact = dateStr.replace(/-/g, '');
-  const sheet = getSheet(SHEETS.CHECKINS.name);
-  const data = sheet.getDataRange().getValues();
+  const rows = getAllRows(SHEETS.CHECKINS.name);
   let count = 0;
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] && String(data[i][0]).indexOf('CHK-' + dateCompact) === 0) {
-      count++;
-    }
-  }
+  rows.forEach(function(r) {
+    if (r.checkin_id && String(r.checkin_id).indexOf('CHK-' + dateCompact) === 0) count++;
+  });
   return 'CHK-' + dateCompact + '-' + padLeft(count + 1, 4);
 }
 
 function nextLeaveId() {
   const today = todayBangkok().replace(/-/g, '');
-  const sheet = getSheet(SHEETS.LEAVES.name);
-  const data = sheet.getDataRange().getValues();
+  const rows = getAllRows(SHEETS.LEAVES.name);
   let count = 0;
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] && String(data[i][0]).indexOf('LV-' + today) === 0) {
-      count++;
-    }
-  }
+  rows.forEach(function(r) {
+    if (r.leave_id && String(r.leave_id).indexOf('LV-' + today) === 0) count++;
+  });
   return 'LV-' + today + '-' + padLeft(count + 1, 4);
 }
 
 function nextOTId() {
   const today = todayBangkok().replace(/-/g, '');
-  const sheet = getSheet(SHEETS.OT.name);
-  const data = sheet.getDataRange().getValues();
+  const rows = getAllRows(SHEETS.OT.name);
   let count = 0;
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] && String(data[i][0]).indexOf('OT-' + today) === 0) {
-      count++;
-    }
-  }
+  rows.forEach(function(r) {
+    if (r.ot_id && String(r.ot_id).indexOf('OT-' + today) === 0) count++;
+  });
   return 'OT-' + today + '-' + padLeft(count + 1, 4);
 }
 
 function nextPaymentId(period) {
-  // period = "2026-05"
   const compact = period.replace(/-/g, '');
-  const sheet = getSheet(SHEETS.PAYMENTS.name);
-  const data = sheet.getDataRange().getValues();
+  const rows = getAllRows(SHEETS.PAYMENTS.name);
   let count = 0;
-  for (let i = 1; i < data.length; i++) {
-    if (data[i][0] && String(data[i][0]).indexOf('PAY-' + compact) === 0) {
-      count++;
-    }
-  }
+  rows.forEach(function(r) {
+    if (r.payment_id && String(r.payment_id).indexOf('PAY-' + compact) === 0) count++;
+  });
   return 'PAY-' + compact + '-' + padLeft(count + 1, 4);
 }
 
@@ -162,13 +145,11 @@ function isEmpty(value) {
  * Check if today is a holiday
  */
 function isHoliday(dateStr) {
-  // dateStr = "2026-05-12"
-  const sheet = getSheet(SHEETS.HOLIDAYS.name);
-  const data = sheet.getDataRange().getValues();
-  for (let i = 1; i < data.length; i++) {
-    const rowDate = data[i][0];
+  const rows = getAllRows(SHEETS.HOLIDAYS.name);
+  for (let i = 0; i < rows.length; i++) {
+    const rowDate = rows[i].date;
     if (rowDate && formatDate(new Date(rowDate)) === dateStr) {
-      return { isHoliday: true, name: data[i][1], type: data[i][2] };
+      return { isHoliday: true, name: rows[i].name, type: rows[i].type };
     }
   }
   return { isHoliday: false };
@@ -196,3 +177,4 @@ function countWorkingDays(startDate, endDate) {
   }
   return count;
 }
+

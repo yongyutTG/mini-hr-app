@@ -119,3 +119,23 @@ alter table public.sync_errors enable row level security;
 
 -- During the migration, Apps Script should write with SUPABASE_SERVICE_ROLE_KEY.
 -- Do not expose the service role key in frontend LIFF pages.
+
+create table if not exists public.app_rows (
+  id uuid primary key default gen_random_uuid(),
+  sheet_name text not null,
+  row_num integer not null,
+  row_key text not null,
+  data jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (sheet_name, row_num),
+  unique (sheet_name, row_key)
+);
+
+create index if not exists app_rows_sheet_name_idx
+  on public.app_rows (sheet_name);
+
+create index if not exists app_rows_sheet_row_num_idx
+  on public.app_rows (sheet_name, row_num);
+
+alter table public.app_rows enable row level security;

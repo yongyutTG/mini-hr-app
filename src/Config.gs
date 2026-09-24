@@ -98,6 +98,15 @@ function getConfig() {
  * Read Config sheet (key-value pairs)
  */
 function readConfigSheet() {
+  if (typeof isSupabasePrimary_ === 'function' && isSupabasePrimary_()) {
+    const rows = getAllRows(SHEETS.CONFIG.name);
+    const config = {};
+    rows.forEach(function(row) {
+      if (row.key) config[row.key] = parseConfigValue_(row.value);
+    });
+    return config;
+  }
+
   const ss = SpreadsheetApp.openById(getProp('SHEET_ID'));
   const sheet = ss.getSheetByName('Config');
   if (!sheet) return {};
@@ -109,19 +118,18 @@ function readConfigSheet() {
   for (let i = 1; i < data.length; i++) {
     const key = data[i][0];
     const value = data[i][1];
-    if (key) {
-      // Try to parse number / boolean
-      if (typeof value === 'string') {
-        if (value === 'true') config[key] = true;
-        else if (value === 'false') config[key] = false;
-        else if (!isNaN(parseFloat(value)) && isFinite(value)) config[key] = parseFloat(value);
-        else config[key] = value;
-      } else {
-        config[key] = value;
-      }
-    }
+    if (key) config[key] = parseConfigValue_(value);
   }
   return config;
+}
+
+function parseConfigValue_(value) {
+  if (typeof value === 'string') {
+    if (value === 'true') return true;
+    if (value === 'false') return false;
+    if (!isNaN(parseFloat(value)) && isFinite(value)) return parseFloat(value);
+  }
+  return value;
 }
 
 /**
@@ -405,3 +413,4 @@ function updateConfigValues(values) {
     }
   });
 }
+

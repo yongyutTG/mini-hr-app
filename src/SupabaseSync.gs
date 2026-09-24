@@ -571,3 +571,72 @@ function mapAttendanceSheetRow_(row, rowNumber, sheetName) {
 }
 
 
+
+/**
+ * Sync every known Google Sheet into Supabase app_rows.
+ * Run this before setting DATA_BACKEND=supabase.
+ */
+function syncSupabaseAppRowsFromSheets() {
+  var spreadsheet = SpreadsheetApp.openById(getProp('SHEET_ID'));
+  var result = {};
+  Object.keys(SHEETS).forEach(function(key) {
+    var def = SHEETS[key];
+    var sheet = spreadsheet.getSheetByName(def.name);
+    if (!sheet) {
+      result[def.name] = { skipped: true, reason: 'sheet_not_found' };
+      return;
+    }
+
+    var values = sheet.getDataRange().getValues();
+    if (values.length < 2) {
+      result[def.name] = { synced: 0, skipped: true, reason: 'empty_sheet' };
+      return;
+    }
+
+    var headers = values[0];
+    var synced = 0;
+    for (var i = 1; i < values.length; i++) {
+      var rowData = {};
+      var isBlank = true;
+      for (var j = 0; j < headers.length; j++) {
+        if (!headers[j]) continue;
+        var value = normalizeAppRowValue_(values[i][j]);
+        rowData[headers[j]] = value;
+        if (value !== '' && value !== null && typeof value !== 'undefined') isBlank = false;
+      }
+      if (isBlank) continue;
+
+      var rowNum = i + 1;
+      var payload = {
+        sheet_name: def.name,
+        row_num: rowNum,
+        row_key: supabaseRowKey_(def.name, rowData, rowNum),
+        data: rowData,
+        updated_at: new Date().toISOString()
+      };
+      supabaseUpsert_('app_rows', payload, 'sheet_name,row_key');
+      synced++;
+    }
+    result[def.name] = { synced: synced };
+  });
+  logInfo('syncSupabaseAppRowsFromSheets', 'completed', result);
+  return result;
+}
+
+function normalizeAppRowValue_(value) {
+  if (Object.prototype.toString.call(value) === '[object Date]') {
+    return value.toISOString();
+  }
+  if (value === undefined) return null;
+  return value;
+}
+
+function testSupabasePrimaryRead() {
+  var previous = getPropOptional('DATA_BACKEND', 'sheets');
+  var rows = supabaseGetAppRows_(SHEETS.EMPLOYEES.name);
+  return {
+    currentBackend: previous,
+    employeesInSupabaseAppRows: rows.length,
+    firstEmployee: rows.length ? rows[0].employee_id || '' : ''
+  };
+}
