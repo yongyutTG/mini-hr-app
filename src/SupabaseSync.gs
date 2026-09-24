@@ -573,62 +573,11 @@ function mapAttendanceSheetRow_(row, rowNumber, sheetName) {
 
 
 /**
- * Sync every known Google Sheet into Supabase app_rows.
- * Run this before setting DATA_BACKEND=supabase.
+ * Backward-compatible name from the first Supabase migration draft.
+ * The current migration writes to structured tables whose names match Sheet tabs.
  */
 function syncSupabaseAppRowsFromSheets() {
-  var spreadsheet = SpreadsheetApp.openById(getProp('SHEET_ID'));
-  var result = {};
-  Object.keys(SHEETS).forEach(function(key) {
-    var def = SHEETS[key];
-    var sheet = spreadsheet.getSheetByName(def.name);
-    if (!sheet) {
-      result[def.name] = { skipped: true, reason: 'sheet_not_found' };
-      return;
-    }
-
-    var values = sheet.getDataRange().getValues();
-    if (values.length < 2) {
-      result[def.name] = { synced: 0, skipped: true, reason: 'empty_sheet' };
-      return;
-    }
-
-    var headers = values[0];
-    var synced = 0;
-    for (var i = 1; i < values.length; i++) {
-      var rowData = {};
-      var isBlank = true;
-      for (var j = 0; j < headers.length; j++) {
-        if (!headers[j]) continue;
-        var value = normalizeAppRowValue_(values[i][j]);
-        rowData[headers[j]] = value;
-        if (value !== '' && value !== null && typeof value !== 'undefined') isBlank = false;
-      }
-      if (isBlank) continue;
-
-      var rowNum = i + 1;
-      var payload = {
-        sheet_name: def.name,
-        row_num: rowNum,
-        row_key: supabaseRowKey_(def.name, rowData, rowNum),
-        data: rowData,
-        updated_at: new Date().toISOString()
-      };
-      supabaseUpsert_('app_rows', payload, 'sheet_name,row_key');
-      synced++;
-    }
-    result[def.name] = { synced: synced };
-  });
-  logInfo('syncSupabaseAppRowsFromSheets', 'completed', result);
-  return result;
-}
-
-function normalizeAppRowValue_(value) {
-  if (Object.prototype.toString.call(value) === '[object Date]') {
-    return value.toISOString();
-  }
-  if (value === undefined) return null;
-  return value;
+  return syncSupabaseStructuredFromSheets();
 }
 
 function testSupabasePrimaryRead() {
@@ -636,7 +585,7 @@ function testSupabasePrimaryRead() {
   var rows = supabaseGetAppRows_(SHEETS.EMPLOYEES.name);
   return {
     currentBackend: previous,
-    employeesInSupabaseAppRows: rows.length,
+    employeesInSupabase: rows.length,
     firstEmployee: rows.length ? rows[0].employee_id || '' : ''
   };
 }
@@ -671,7 +620,7 @@ function syncSupabaseStructuredFromSheets() {
     for (var i = 1; i < values.length; i++) {
       var payload = buildStructuredPayload_(def.name, headers, values[i]);
       if (!payload) continue;
-      var syncResult = supabaseUpsert_(mapping.table, payload, mapping.conflict);
+      var syncResult = supabaseUpsertDirect_(mapping.table, payload, mapping.conflict);
       if (syncResult && syncResult.ok) synced++;
       else failed++;
     }
@@ -823,7 +772,30 @@ function testSupabaseStructuredCounts() {
   });
   return result;
 }
+function switchDataBackendToSupabase() {
+  var counts = testSupabaseStructuredCounts();
+  var missing = [];
+  Object.keys(counts).forEach(function(table) {
+    if (!counts[table] || counts[table].ok !== true) missing.push(table + ':' + (counts[table] ? counts[table].error : 'unknown'));
+  });
+  if (missing.length) {
+    throw new Error('supabase_tables_not_ready: ' + missing.join(', '));
+  }
+  if (!counts.Employees || Number(counts.Employees.rows || 0) === 0) {
+    throw new Error('supabase_data_not_synced: Employees has 0 rows. Run syncSupabaseStructuredFromSheets first.');
+  }
+  PropertiesService.getScriptProperties().setProperty('DATA_BACKEND', 'supabase');
+  return {
+    ok: true,
+    DATA_BACKEND: 'supabase',
+    counts: counts
+  };
+}
 
+function switchDataBackendToSheets() {
+  PropertiesService.getScriptProperties().setProperty('DATA_BACKEND', 'sheets');
+  return { ok: true, DATA_BACKEND: 'sheets' };
+}
 
 
 

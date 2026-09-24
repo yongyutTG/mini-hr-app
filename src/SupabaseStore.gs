@@ -3,7 +3,7 @@
  * Supabase Store — primary data backend compatibility layer
  * ============================================================
  *
- * Uses public.app_rows as a generic JSON row store so the existing Apps Script
+ * Uses structured Supabase tables whose names match Google Sheet tabs so the existing Apps Script
  * handlers can keep using SheetStore-style CRUD while Google Sheets is removed
  * from the live path.
  */
@@ -41,98 +41,129 @@ function supabaseRest_(method, path, payload, extraHeaders) {
   return body ? JSON.parse(body) : null;
 }
 
+
 function supabaseTablePath_(tableName, query) {
   return '/rest/v1/' + encodeURIComponent(tableName) + (query ? '?' + query : '');
+}
+function supabaseUpsertDirect_(tableName, payload, conflictColumns) {
+  var path = supabaseTablePath_(tableName, conflictColumns ? 'on_conflict=' + encodeURIComponent(conflictColumns) : '');
+  try {
+    supabaseRest_('post', path, payload, {
+      Prefer: 'resolution=merge-duplicates,return=representation'
+    });
+    return { ok: true };
+  } catch (err) {
+    logError('Supabase direct upsert failed', {
+      tableName: tableName,
+      error: err && err.message ? err.message : String(err),
+      payload: payload
+    });
+    return { ok: false, error: err && err.message ? err.message : String(err) };
+  }
 }
 
 function supabaseFilterValue_(value) {
   return encodeURIComponent(String(value));
 }
 
-function supabaseGetAppRows_(sheetName) {
-  var query = [
-    'sheet_name=eq.' + supabaseFilterValue_(sheetName),
-    'select=row_num,data',
-    'order=row_num.asc'
-  ].join('&');
-  var rows = supabaseRest_('get', supabaseTablePath_('app_rows', query));
-  return (rows || []).map(function(row) {
-    var obj = row.data || {};
-    obj._row = row.row_num;
+
+function supabaseGetSheetRows_(sheetName) {
+  var mapping = getStructuredTableMapping_(sheetName);
+  if (!mapping) throw new Error('supabase_table_mapping_not_found: ' + sheetName);
+
+  var query = 'select=*&limit=10000';
+  var rows = supabaseRest_('get', supabaseTablePath_(mapping.table, query), null, null) || [];
+  return rows.map(function(row, index) {
+    var obj = Object.assign({}, row);
+    obj._row = index + 2;
     return obj;
   });
 }
 
-function supabaseGetAppRowByNumber_(sheetName, rowNum) {
-  var query = [
-    'sheet_name=eq.' + supabaseFilterValue_(sheetName),
-    'row_num=eq.' + encodeURIComponent(String(rowNum)),
-    'select=row_num,data',
-    'limit=1'
-  ].join('&');
-  var rows = supabaseRest_('get', supabaseTablePath_('app_rows', query));
-  if (!rows || rows.length === 0) return null;
-  var obj = rows[0].data || {};
-  obj._row = rows[0].row_num;
-  return obj;
+function supabaseGetSheetRowByNumber_(sheetName, rowNum) {
+  var rows = supabaseGetSheetRows_(sheetName);
+  var index = Number(rowNum) - 2;
+  if (index < 0 || index >= rows.length) return null;
+  return rows[index];
 }
 
-function supabaseNextRowNumber_(sheetName) {
-  var query = [
-    'sheet_name=eq.' + supabaseFilterValue_(sheetName),
-    'select=row_num',
-    'order=row_num.desc',
-    'limit=1'
-  ].join('&');
-  var rows = supabaseRest_('get', supabaseTablePath_('app_rows', query));
-  if (!rows || rows.length === 0) return 2;
-  return Number(rows[0].row_num || 1) + 1;
+function supabaseBuildSheetPayload_(sheetName, obj) {
+  var payload = {};
+  Object.keys(obj || {}).forEach(function(key) {
+    if (key === '_row') return;
+    var columnName = structuredColumnName_(key);
+    payload[columnName] = normalizeStructuredValue_(columnName, obj[key]);
+  });
+  payload.updated_at = new Date().toISOString();
+  return payload;
 }
 
-function supabaseRowKey_(sheetName, obj, rowNum) {
-  var idFields = [
-    'employee_id', 'checkin_id', 'leave_id', 'ot_id', 'payment_id', 'item_id', 'key', 'date'
-  ];
-  for (var i = 0; i < idFields.length; i++) {
-    if (obj[idFields[i]]) return sheetName + ':' + obj[idFields[i]];
+function supabasePrimaryFilter_(mapping, row) {
+  if (!mapping || !mapping.conflict) return null;
+  var columns = mapping.conflict.split(',');
+  var filters = [];
+  for (var i = 0; i < columns.length; i++) {
+    var column = columns[i].trim();
+    if (!column) continue;
+    var value = row[column];
+    if (value === undefined || value === null || value === '') return null;
+    filters.push(column + '=eq.' + supabaseFilterValue_(value));
   }
-  return sheetName + ':row:' + rowNum;
+  return filters.length ? filters.join('&') : null;
+}
+
+function supabaseWriteSheetRow_(sheetName, obj) {
+  var mapping = getStructuredTableMapping_(sheetName);
+  if (!mapping) throw new Error('supabase_table_mapping_not_found: ' + sheetName);
+  var payload = supabaseBuildSheetPayload_(sheetName, obj);
+  var path = supabaseTablePath_(mapping.table, mapping.conflict ? 'on_conflict=' + encodeURIComponent(mapping.conflict) : '');
+  var rows = supabaseRest_('post', path, payload, {
+    Prefer: 'resolution=merge-duplicates,return=representation'
+  });
+  return rows && rows.length ? Object.assign({}, rows[0], { _row: null }) : obj;
+}
+
+function supabasePatchSheetRowByNumber_(sheetName, rowNum, updates) {
+  var mapping = getStructuredTableMapping_(sheetName);
+  if (!mapping) throw new Error('supabase_table_mapping_not_found: ' + sheetName);
+  var current = supabaseGetSheetRowByNumber_(sheetName, rowNum);
+  if (!current) return false;
+  var filter = supabasePrimaryFilter_(mapping, current);
+  if (!filter) throw new Error('supabase_primary_key_not_found: ' + sheetName + ' row ' + rowNum);
+  var payload = supabaseBuildSheetPayload_(sheetName, updates || {});
+  supabaseRest_('patch', supabaseTablePath_(mapping.table, filter), payload, {
+    Prefer: 'return=minimal'
+  });
+  return true;
+}
+
+function supabaseDeleteSheetRowByNumber_(sheetName, rowNum) {
+  var mapping = getStructuredTableMapping_(sheetName);
+  if (!mapping) throw new Error('supabase_table_mapping_not_found: ' + sheetName);
+  var current = supabaseGetSheetRowByNumber_(sheetName, rowNum);
+  if (!current) return false;
+  var filter = supabasePrimaryFilter_(mapping, current);
+  if (!filter) throw new Error('supabase_primary_key_not_found: ' + sheetName + ' row ' + rowNum);
+  supabaseRest_('delete', supabaseTablePath_(mapping.table, filter), null, {
+    Prefer: 'return=minimal'
+  });
+  return true;
+}
+function supabaseGetAppRows_(sheetName) {
+  return supabaseGetSheetRows_(sheetName);
 }
 
 function supabaseInsertAppRow_(sheetName, obj) {
-  var rowNum = supabaseNextRowNumber_(sheetName);
-  var data = Object.assign({}, obj);
-  delete data._row;
-  var payload = {
-    sheet_name: sheetName,
-    row_num: rowNum,
-    row_key: supabaseRowKey_(sheetName, data, rowNum),
-    data: data,
-    updated_at: new Date().toISOString()
-  };
-  supabaseRest_('post', supabaseTablePath_('app_rows'), payload, {
-    Prefer: 'return=minimal'
-  });
-  return obj;
+  return supabaseWriteSheetRow_(sheetName, obj);
 }
 
 function supabaseUpdateAppRowByNumber_(sheetName, rowNum, updates) {
-  var current = supabaseGetAppRowByNumber_(sheetName, rowNum);
-  if (!current) return false;
-  var data = Object.assign({}, current, updates || {});
-  delete data._row;
-  supabaseRest_('patch', supabaseTablePath_('app_rows', 'sheet_name=eq.' + supabaseFilterValue_(sheetName) + '&row_num=eq.' + encodeURIComponent(String(rowNum))), {
-    data: data,
-    updated_at: new Date().toISOString()
-  }, {
-    Prefer: 'return=minimal'
-  });
-  return true;
+  return supabasePatchSheetRowByNumber_(sheetName, rowNum, updates);
 }
 
 function supabaseDeleteAppRowByNumber_(sheetName, rowNum) {
-  supabaseRest_('delete', supabaseTablePath_('app_rows', 'sheet_name=eq.' + supabaseFilterValue_(sheetName) + '&row_num=eq.' + encodeURIComponent(String(rowNum))), null, {
-    Prefer: 'return=minimal'
-  });
-  return true;
+  return supabaseDeleteSheetRowByNumber_(sheetName, rowNum);
 }
+
+
+
