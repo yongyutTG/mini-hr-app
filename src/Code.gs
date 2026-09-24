@@ -132,3 +132,15 @@ function testConfig() {
   Logger.log(JSON.stringify(config, null, 2));
   return config;
 }
+function checkBackendStatus() {
+  return debugBackendStatus();
+}
+
+function setBackendSupabase() {
+  return forceDataBackendSupabase();
+}
+
+function setBackendSheets() {
+  return switchDataBackendToSheets();
+}
+
