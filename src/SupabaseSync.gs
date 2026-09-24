@@ -640,3 +640,180 @@ function testSupabasePrimaryRead() {
     firstEmployee: rows.length ? rows[0].employee_id || '' : ''
   };
 }
+
+/**
+ * Sync Google Sheets into structured Supabase tables that mirror each sheet.
+ * Run after supabase/structured-schema.sql has been applied.
+ */
+function syncSupabaseStructuredFromSheets() {
+  var spreadsheet = SpreadsheetApp.openById(getProp('SHEET_ID'));
+  var result = {};
+  Object.keys(SHEETS).forEach(function(key) {
+    var def = SHEETS[key];
+    var mapping = getStructuredTableMapping_(def.name);
+    if (!mapping) return;
+
+    var sheet = spreadsheet.getSheetByName(def.name);
+    if (!sheet) {
+      result[def.name] = { skipped: true, reason: 'sheet_not_found' };
+      return;
+    }
+
+    var values = sheet.getDataRange().getValues();
+    if (values.length < 2) {
+      result[def.name] = { synced: 0, skipped: true, reason: 'empty_sheet' };
+      return;
+    }
+
+    var headers = values[0];
+    var synced = 0;
+    var failed = 0;
+    for (var i = 1; i < values.length; i++) {
+      var payload = buildStructuredPayload_(def.name, headers, values[i]);
+      if (!payload) continue;
+      var syncResult = supabaseUpsert_(mapping.table, payload, mapping.conflict);
+      if (syncResult && syncResult.ok) synced++;
+      else failed++;
+    }
+    result[def.name] = { table: mapping.table, synced: synced, failed: failed };
+  });
+  logInfo('syncSupabaseStructuredFromSheets', 'completed', result);
+  return result;
+}
+
+function getStructuredTableMapping_(sheetName) {
+  var map = {
+    Employees: { table: 'employees_sheet', conflict: 'employee_id' },
+    Checkins: { table: 'checkins_sheet', conflict: 'checkin_id' },
+    Leaves: { table: 'leaves_sheet', conflict: 'leave_id' },
+    OT: { table: 'ot_sheet', conflict: 'ot_id' },
+    Payments: { table: 'payments_sheet', conflict: 'payment_id' },
+    LeaveQuota: { table: 'leave_quota_sheet', conflict: 'employee_id,year' },
+    PayItems: { table: 'pay_items_sheet', conflict: 'item_id' },
+    Holidays: { table: 'holidays_sheet', conflict: 'date' },
+    Config: { table: 'config_sheet', conflict: 'key' },
+    Logs: { table: 'logs_sheet', conflict: null },
+    Approvers: { table: 'approvers_sheet', conflict: 'employee_id,level' }
+  };
+  return map[sheetName] || null;
+}
+
+function buildStructuredPayload_(sheetName, headers, values) {
+  var row = {};
+  var isBlank = true;
+  for (var i = 0; i < headers.length; i++) {
+    if (!headers[i]) continue;
+    var columnName = structuredColumnName_(headers[i]);
+    var value = normalizeStructuredValue_(columnName, values[i]);
+    row[columnName] = value;
+    if (value !== '' && value !== null && typeof value !== 'undefined') isBlank = false;
+  }
+  if (isBlank) return null;
+
+  if (sheetName === 'Employees' && !row.employee_id) return null;
+  if (sheetName === 'Checkins' && !row.checkin_id) return null;
+  if (sheetName === 'Leaves' && !row.leave_id) return null;
+  if (sheetName === 'OT' && !row.ot_id) return null;
+  if (sheetName === 'Payments' && !row.payment_id) return null;
+  if (sheetName === 'LeaveQuota' && (!row.employee_id || !row.year)) return null;
+  if (sheetName === 'PayItems' && !row.item_id) return null;
+  if (sheetName === 'Holidays' && !row.date) return null;
+  if (sheetName === 'Config' && !row.key) return null;
+  if (sheetName === 'Approvers' && (!row.employee_id || !row.level)) return null;
+
+  row.updated_at = new Date().toISOString();
+  return row;
+}
+
+function structuredColumnName_(header) {
+  return String(header || '')
+    .trim()
+    .replace(/([A-Z])/g, function(match) { return '_' + match.toLowerCase(); })
+    .replace(/^approver__/, 'approver_')
+    .replace(/__+/g, '_');
+}
+function normalizeStructuredValue_(columnName, value) {
+  if (value === undefined || value === '') return null;
+
+  var dateColumns = {
+    start_date: true,
+    end_date: true,
+    ot_date: true,
+    checkin_date: true,
+    start_date: true,
+    date: true
+  };
+  var timeColumns = { start_time: true, end_time: true };
+  var dateTimeColumns = {
+    registered_at: true,
+    checkin_at: true,
+    approved_at: true,
+    submitted_at: true,
+    closed_at: true,
+    paid_at: true,
+    created_at: true,
+    timestamp: true
+  };
+  var numericColumns = {
+    base_pay_monthly: true,
+    ot_rate_per_hour: true,
+    lat: true,
+    lng: true,
+    distance_m: true,
+    total_days: true,
+    total_hours: true,
+    work_days: true,
+    ot_hours: true,
+    base_pay: true,
+    ot_pay: true,
+    bonus: true,
+    deduction: true,
+    total_amount: true,
+    sick_quota: true,
+    sick_used: true,
+    personal_quota: true,
+    personal_used: true,
+    vacation_quota: true,
+    vacation_used: true,
+    amount: true,
+    year: true
+  };
+
+  if (columnName === 'is_active') return value === true || value === 'TRUE' || value === 'true' || value === 1;
+  if (columnName === 'approval_history') {
+    try { return value ? JSON.parse(String(value)) : []; }
+    catch (err) { return []; }
+  }
+  if (dateColumns[columnName]) return formatDateValue_(value);
+  if (timeColumns[columnName]) return formatTimeValue_(value);
+  if (dateTimeColumns[columnName]) return formatDateTimeForSupabase_(value);
+  if (numericColumns[columnName]) return value === null ? null : Number(value || 0);
+  return String(value);
+}
+
+function formatDateTimeForSupabase_(value) {
+  if (!value) return null;
+  if (Object.prototype.toString.call(value) === '[object Date]') return value.toISOString();
+  var text = String(value).trim();
+  if (!text) return null;
+  if (/^\d{4}-\d{2}-\d{2}T/.test(text)) return text;
+  if (/^\d{4}-\d{2}-\d{2} /.test(text)) return text.replace(' ', 'T') + '+07:00';
+  return text;
+}
+
+function testSupabaseStructuredCounts() {
+  var tables = [
+    'employees_sheet', 'checkins_sheet', 'leaves_sheet', 'ot_sheet',
+    'payments_sheet', 'leave_quota_sheet', 'pay_items_sheet', 'holidays_sheet',
+    'config_sheet', 'logs_sheet', 'approvers_sheet'
+  ];
+  var result = {};
+  tables.forEach(function(table) {
+    var rows = supabaseRest_('get', supabaseTablePath_(table, 'select=*&limit=10000'), null, null);
+    result[table] = rows ? rows.length : 0;
+  });
+  return result;
+}
+
+
+
