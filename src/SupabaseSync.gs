@@ -809,11 +809,21 @@ function testSupabaseStructuredCounts() {
   ];
   var result = {};
   tables.forEach(function(table) {
-    var rows = supabaseRest_('get', supabaseTablePath_(table, 'select=*&limit=10000'), null, null);
-    result[table] = rows ? rows.length : 0;
+    try {
+      var rows = supabaseRest_('get', supabaseTablePath_(table, 'select=*&limit=10000'), null, null);
+      result[table] = { ok: true, rows: rows ? rows.length : 0 };
+    } catch (err) {
+      var message = err && err.message ? err.message : String(err);
+      result[table] = {
+        ok: false,
+        rows: 0,
+        error: message.indexOf('PGRST205') !== -1 ? 'missing_table' : message
+      };
+    }
   });
   return result;
 }
+
 
 
 
