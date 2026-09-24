@@ -318,7 +318,7 @@ function syncSheetRowsToSupabase_(options) {
 }
 
 function findSupabaseSyncSheet_(propertyName, fallbackNames) {
-  var spreadsheet = SpreadsheetApp.openById(getProp('SPREADSHEET_ID'));
+  var spreadsheet = SpreadsheetApp.openById(getProp('SHEET_ID'));
   var configuredName = getPropOptional(propertyName, '');
   if (configuredName) {
     var configuredSheet = spreadsheet.getSheetByName(configuredName);
