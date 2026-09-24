@@ -17,11 +17,13 @@ function getSupabaseConfig_() {
 }
 
 function normalizeSupabaseUrl_(rawUrl) {
-  var url = String(rawUrl || '').trim().replace(/\/+$/, '');
+  var url = String(rawUrl || '').trim();
   if (!url) return '';
 
-  // Allow pasting either the real API URL or the dashboard project URL.
-  // Dashboard example: https://supabase.com/dashboard/project/olwkhorvaxcvuxeqtcpd
+  // Allow pasting either the real API URL or any dashboard project URL.
+  // Dashboard examples:
+  // https://supabase.com/dashboard/project/olwkhorvaxcvuxeqtcpd
+  // https://supabase.com/dashboard/project/olwkhorvaxcvuxeqtcpd/settings/api-keys
   var dashboardMatch = url.match(/supabase\.com\/dashboard\/project\/([a-z0-9]+)/i);
   if (dashboardMatch && dashboardMatch[1]) {
     return 'https://' + dashboardMatch[1] + '.supabase.co';
@@ -32,7 +34,40 @@ function normalizeSupabaseUrl_(rawUrl) {
     return 'https://' + url + '.supabase.co';
   }
 
-  return url;
+  // If the user pasted a REST endpoint, reduce it back to the project base URL.
+  var restMatch = url.match(/^(https:\/\/[^\/]+\.supabase\.co)(?:\/rest\/v1.*)?$/i);
+  if (restMatch && restMatch[1]) {
+    return restMatch[1].replace(/\/+$/, '');
+  }
+
+  return url.replace(/\/+$/, '');
+}
+
+function testSupabaseConnection() {
+  var config = getSupabaseConfig_();
+  var result = {
+    normalizedUrl: config.url,
+    hasServiceKey: Boolean(config.serviceKey),
+    testEndpoint: config.url ? config.url + '/rest/v1/employees?select=employee_code&limit=1' : ''
+  };
+
+  if (!config.url || !config.serviceKey) {
+    logWarn('Supabase connection test skipped', result);
+    return result;
+  }
+
+  var response = UrlFetchApp.fetch(result.testEndpoint, {
+    method: 'get',
+    muteHttpExceptions: true,
+    headers: {
+      apikey: config.serviceKey,
+      Authorization: 'Bearer ' + config.serviceKey
+    }
+  });
+  result.status = response.getResponseCode();
+  result.body = response.getContentText();
+  logInfo('Supabase connection test', result);
+  return result;
 }
 
 function supabaseInsert_(tableName, payload) {
@@ -512,3 +547,4 @@ function mapAttendanceSheetRow_(row, rowNumber, sheetName) {
     sheet_row: rowNumber
   };
 }
+
