@@ -48,7 +48,7 @@ function testSupabaseConnection() {
   var result = {
     normalizedUrl: config.url,
     hasServiceKey: Boolean(config.serviceKey),
-    testEndpoint: config.url ? config.url + '/rest/v1/employees?select=employee_code&limit=1' : ''
+    testEndpoint: config.url ? config.url + '/rest/v1/Employees?select=employee_id&limit=1' : ''
   };
 
   if (!config.url || !config.serviceKey) {
@@ -683,17 +683,17 @@ function syncSupabaseStructuredFromSheets() {
 
 function getStructuredTableMapping_(sheetName) {
   var map = {
-    Employees: { table: 'employees_sheet', conflict: 'employee_id' },
-    Checkins: { table: 'checkins_sheet', conflict: 'checkin_id' },
-    Leaves: { table: 'leaves_sheet', conflict: 'leave_id' },
-    OT: { table: 'ot_sheet', conflict: 'ot_id' },
-    Payments: { table: 'payments_sheet', conflict: 'payment_id' },
-    LeaveQuota: { table: 'leave_quota_sheet', conflict: 'employee_id,year' },
-    PayItems: { table: 'pay_items_sheet', conflict: 'item_id' },
-    Holidays: { table: 'holidays_sheet', conflict: 'date' },
-    Config: { table: 'config_sheet', conflict: 'key' },
-    Logs: { table: 'logs_sheet', conflict: null },
-    Approvers: { table: 'approvers_sheet', conflict: 'employee_id,level' }
+    Employees: { table: 'Employees', conflict: 'employee_id' },
+    Checkins: { table: 'Checkins', conflict: 'checkin_id' },
+    Leaves: { table: 'Leaves', conflict: 'leave_id' },
+    OT: { table: 'OT', conflict: 'ot_id' },
+    Payments: { table: 'Payments', conflict: 'payment_id' },
+    LeaveQuota: { table: 'LeaveQuota', conflict: 'employee_id,year' },
+    PayItems: { table: 'PayItems', conflict: 'item_id' },
+    Holidays: { table: 'Holidays', conflict: 'date' },
+    Config: { table: 'Config', conflict: 'key' },
+    Logs: { table: 'Logs', conflict: null },
+    Approvers: { table: 'Approvers', conflict: 'employee_id,level' }
   };
   return map[sheetName] || null;
 }
@@ -803,9 +803,9 @@ function formatDateTimeForSupabase_(value) {
 
 function testSupabaseStructuredCounts() {
   var tables = [
-    'employees_sheet', 'checkins_sheet', 'leaves_sheet', 'ot_sheet',
-    'payments_sheet', 'leave_quota_sheet', 'pay_items_sheet', 'holidays_sheet',
-    'config_sheet', 'logs_sheet', 'approvers_sheet'
+    'Employees', 'Checkins', 'Leaves', 'OT',
+    'Payments', 'LeaveQuota', 'PayItems', 'Holidays',
+    'Config', 'Logs', 'Approvers'
   ];
   var result = {};
   tables.forEach(function(table) {
@@ -823,6 +823,7 @@ function testSupabaseStructuredCounts() {
   });
   return result;
 }
+
 
 
 
