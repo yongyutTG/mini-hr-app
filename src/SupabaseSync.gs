@@ -11,9 +11,28 @@ function isSupabaseSyncEnabled_() {
 
 function getSupabaseConfig_() {
   return {
-    url: String(getPropOptional('SUPABASE_URL', '')).replace(/\/+$/, ''),
+    url: normalizeSupabaseUrl_(getPropOptional('SUPABASE_URL', '')),
     serviceKey: getPropOptional('SUPABASE_SERVICE_ROLE_KEY', '')
   };
+}
+
+function normalizeSupabaseUrl_(rawUrl) {
+  var url = String(rawUrl || '').trim().replace(/\/+$/, '');
+  if (!url) return '';
+
+  // Allow pasting either the real API URL or the dashboard project URL.
+  // Dashboard example: https://supabase.com/dashboard/project/olwkhorvaxcvuxeqtcpd
+  var dashboardMatch = url.match(/supabase\.com\/dashboard\/project\/([a-z0-9]+)/i);
+  if (dashboardMatch && dashboardMatch[1]) {
+    return 'https://' + dashboardMatch[1] + '.supabase.co';
+  }
+
+  // Allow entering only the project ref for convenience.
+  if (/^[a-z0-9]{20}$/.test(url)) {
+    return 'https://' + url + '.supabase.co';
+  }
+
+  return url;
 }
 
 function supabaseInsert_(tableName, payload) {
